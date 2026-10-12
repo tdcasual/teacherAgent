@@ -17,6 +17,12 @@ from .assignment_learning_evidence_service import build_assignment_progress_evid
 from .assignment_process_archive_service import read_process_archive_summary
 from .teacher_grade_service import load_teacher_grade, official_score_from
 
+_log = logging.getLogger(__name__)
+
+
+def _empty_student_profile(_sid: str) -> Dict[str, Any]:
+    return {}
+
 
 @dataclass(frozen=True)
 class AssignmentProgressDeps:
@@ -32,9 +38,7 @@ class AssignmentProgressDeps:
     atomic_write_json: Callable[[Any, Any], None]
     today_iso: Callable[[], str]
     now_iso: Callable[[], str]
-
-
-_log = logging.getLogger(__name__)
+    load_student_profile: Callable[[str], Dict[str, Any]] = _empty_student_profile
 
 
 _DEFAULT_COMPLETION_POLICY: Dict[str, Any] = {
@@ -477,6 +481,7 @@ def _student_progress(
     today: Optional[date],
     folder: Path,
     include_student_payload: bool,
+    assignment_kind: str,
 ) -> Dict[str, Any]:
     discussion = deps.session_discussion_pass(student_id, assignment_id)
     discussion_pass = bool(discussion.get("pass"))
@@ -513,11 +518,6 @@ def _student_progress(
     )
     payload: Optional[Dict[str, Any]] = None
     if include_student_payload:
-        archive = read_process_archive_summary(Path(deps.data_dir), assignment_id, student_id)
-        merged_process = dict(process or {})
-        merged_process["status"] = str(archive.get("status") or merged_process.get("status") or "none")
-        if archive.get("stuck_points"):
-            merged_process["stuck_points"] = archive.get("stuck_points")
         payload = _student_payload(
             student_id=student_id,
             profile=profile,
@@ -531,15 +531,16 @@ def _student_progress(
             overdue=overdue,
             submitted=submitted,
             official_score=official_score,
-            process=merged_process,
+            process=process,
             teacher_grade=teacher_grade,
         )
-        payload["process_archive_status"] = str(archive.get("status") or "none")
-        payload["process_archive"] = archive
-        from .student_practice_service import practice_status_counts
-
-        payload["practice"] = practice_status_counts(
-            Path(deps.data_dir), assignment_id, student_id
+        _attach_student_view_fields(
+            payload,
+            assignment_id=assignment_id,
+            student_id=student_id,
+            assignment_kind=assignment_kind,
+            process=process,
+            deps=deps,
         )
     return {
         "discussion_pass": discussion_pass,
@@ -550,6 +551,66 @@ def _student_progress(
         "process_status": str(process.get("status") or "none"),
         "payload": payload,
     }
+
+
+def portrait_snippet(profile: Dict[str, Any]) -> Dict[str, Any]:
+    data = profile if isinstance(profile, dict) else {}
+    history = data.get("practice_history") or []
+    if not isinstance(history, list):
+        history = []
+    last = history[-1] if history else {}
+    if not isinstance(last, dict):
+        last = {}
+    weak = data.get("recent_weak_kp") or []
+    if not isinstance(weak, list):
+        weak = []
+    return {
+        "recent_weak_kp": [str(item) for item in weak if str(item).strip()][:5],
+        "next_focus": str(data.get("next_focus") or ""),
+        "last_source": str(last.get("source") or ""),
+        "last_assignment_id": str(last.get("assignment_id") or ""),
+    }
+
+
+def _load_student_profile_safe(deps: AssignmentProgressDeps, student_id: str) -> Dict[str, Any]:
+    try:
+        loaded = deps.load_student_profile(student_id)
+    except Exception:  # policy: allowed-broad-except
+        _log.debug("failed to load student profile for portrait %s", student_id, exc_info=True)
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _attach_student_view_fields(
+    payload: Dict[str, Any],
+    *,
+    assignment_id: str,
+    student_id: str,
+    assignment_kind: str,
+    process: Dict[str, Any],
+    deps: AssignmentProgressDeps,
+) -> None:
+    archive = read_process_archive_summary(Path(deps.data_dir), assignment_id, student_id)
+    merged_process = dict(process or {})
+    merged_process["status"] = str(archive.get("status") or merged_process.get("status") or "none")
+    if archive.get("stuck_points"):
+        merged_process["stuck_points"] = archive.get("stuck_points")
+    payload["process"] = merged_process
+    payload["process_archive_status"] = str(archive.get("status") or "none")
+    payload["process_archive"] = archive
+    payload["portrait"] = portrait_snippet(_load_student_profile_safe(deps, student_id))
+    if assignment_kind == "problem_set":
+        from .student_practice_service import practice_status_counts
+
+        payload["practice"] = practice_status_counts(
+            Path(deps.data_dir), assignment_id, student_id
+        )
+        return
+    from .assignment_rubric_service import load_rubric_suggestion
+
+    payload["rubric_suggestion"] = load_rubric_suggestion(
+        Path(deps.data_dir), assignment_id, student_id
+    )
 
 
 def _student_sort_key(item: Dict[str, Any]) -> tuple[str, str, str]:
@@ -595,6 +656,7 @@ def compute_assignment_progress(
     due_date = _parse_due_date(due_at)
     today = _today_date(deps)
     profiles = _profile_map(deps.list_all_student_profiles())
+    assignment_kind = effective_assignment_kind(meta)
 
     students_out: List[Dict[str, Any]] = []
     sql_students: List[Dict[str, Any]] = []
@@ -614,6 +676,7 @@ def compute_assignment_progress(
             today=today,
             folder=folder,
             include_student_payload=include_students,
+            assignment_kind=assignment_kind,
         )
         discussion_pass_count += int(bool(student["discussion_pass"]))
         submission_count += int(bool(student["submitted"]))
@@ -630,7 +693,7 @@ def compute_assignment_progress(
     result = {
         "ok": True,
         "assignment_id": assignment_id,
-        "assignment_kind": effective_assignment_kind(meta),
+        "assignment_kind": assignment_kind,
         "date": deps.resolve_assignment_date(meta, folder),
         "scope": meta.get("scope") or "",
         "class_name": meta.get("class_name") or "",
@@ -648,6 +711,14 @@ def compute_assignment_progress(
         "students": students_out if include_students else [],
         "updated_at": deps.now_iso(),
     }
+    if assignment_kind != "problem_set":
+        from .assignment_rubric_service import load_assignment_rubric
+
+        loaded = load_assignment_rubric(folder)
+        result["rubric"] = {
+            "source": str(loaded.get("source") or "none"),
+            "items": loaded.get("items") if isinstance(loaded.get("items"), list) else [],
+        }
 
     persist_error = _persist_progress_2pc(
         data_dir=data_dir,

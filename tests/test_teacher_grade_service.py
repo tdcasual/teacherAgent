@@ -7,12 +7,14 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+from services.api.api_models import TeacherGradeRequest
 from services.api.auth_service import AuthPrincipal
 from services.api.teacher_grade_service import (
     TeacherGradeError,
     load_teacher_grade,
     official_score_from,
     save_teacher_grade,
+    save_teacher_grade_from_request,
 )
 from tests.helpers.app_factory import create_test_app
 
@@ -313,3 +315,89 @@ def test_grade_endpoint_null_override_clears_score() -> None:
         )
         assert stored["override_score_earned"] is None
         assert stored["comment"] == "覆盖"
+
+
+def _write_ready_suggestion(tmp_path: Path, *, score: Any = 12.0) -> None:
+    path = tmp_path / "student_submissions" / "HW_1" / "S1" / "rubric_suggestion.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "schema": "assignment_rubric_suggestion/v1",
+                "status": "ready",
+                "suggested_score": score,
+                "comment": "量规建议评语",
+                "checks": [{"id": "1", "pass": True, "note": "ok"}],
+                "source": "llm",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_adopt_rubric_suggestion_writes_override(tmp_path: Path) -> None:
+    _write_json(tmp_path / "assignments" / "HW_1" / "meta.json", _meta())
+    _write_ready_suggestion(tmp_path, score=12.0)
+    result = save_teacher_grade_from_request(
+        "HW_1",
+        "S1",
+        principal=_owner(),
+        data_dir=tmp_path,
+        request=TeacherGradeRequest(adopt_rubric_suggestion=True),
+    )
+    assert result["ok"] is True
+    stored = load_teacher_grade(tmp_path, "HW_1", "S1")
+    assert stored is not None
+    assert stored["override_score_earned"] == 12.0
+    assert stored["comment"] == "量规建议评语"
+    assert stored["rubric_checks"][0]["id"] == "1"
+
+
+def test_adopt_rubric_suggestion_does_not_run_without_flag(tmp_path: Path) -> None:
+    _write_json(tmp_path / "assignments" / "HW_1" / "meta.json", _meta())
+    _write_ready_suggestion(tmp_path, score=12.0)
+    save_teacher_grade_from_request(
+        "HW_1",
+        "S1",
+        principal=_owner(),
+        data_dir=tmp_path,
+        request=TeacherGradeRequest(comment="手写评语"),
+    )
+    stored = load_teacher_grade(tmp_path, "HW_1", "S1")
+    assert stored is not None
+    assert stored["override_score_earned"] is None
+    assert stored["comment"] == "手写评语"
+
+
+def test_override_score_wins_over_adopt_flag(tmp_path: Path) -> None:
+    _write_json(tmp_path / "assignments" / "HW_1" / "meta.json", _meta())
+    _write_ready_suggestion(tmp_path, score=12.0)
+    save_teacher_grade_from_request(
+        "HW_1",
+        "S1",
+        principal=_owner(),
+        data_dir=tmp_path,
+        request=TeacherGradeRequest(adopt_rubric_suggestion=True, override_score=9.0),
+    )
+    stored = load_teacher_grade(tmp_path, "HW_1", "S1")
+    assert stored is not None
+    assert stored["override_score_earned"] == 9.0
+
+
+def test_adopt_null_suggested_score_is_400(tmp_path: Path) -> None:
+    _write_json(tmp_path / "assignments" / "HW_1" / "meta.json", _meta())
+    _write_ready_suggestion(tmp_path, score=None)
+    try:
+        save_teacher_grade_from_request(
+            "HW_1",
+            "S1",
+            principal=_owner(),
+            data_dir=tmp_path,
+            request=TeacherGradeRequest(adopt_rubric_suggestion=True),
+        )
+    except TeacherGradeError as exc:
+        assert exc.status_code == 400
+        assert exc.detail == "rubric_suggestion_unscored"
+    else:
+        raise AssertionError("expected TeacherGradeError")

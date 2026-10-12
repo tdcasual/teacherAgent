@@ -121,6 +121,70 @@ def _optional_float(value: Any) -> Optional[float]:
     return number
 
 
+def _normalize_rubric_checks(raw: Any) -> List[Dict[str, Any]]:
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise TeacherGradeError(400, "invalid_rubric_checks")
+    checks: List[Dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        checks.append(
+            {
+                "id": str(item.get("id") or "").strip(),
+                "pass": bool(item.get("pass")),
+                "note": str(item.get("note") or ""),
+            }
+        )
+    return checks
+
+
+def _emit_diag(event: str, payload: Dict[str, Any]) -> None:
+    try:
+        from .app_core import diag_log
+    except Exception:  # policy: allowed-broad-except
+        _log.debug("diag_log import failed", exc_info=True)
+        return
+    try:
+        diag_log(event, payload)
+    except Exception:  # policy: allowed-broad-except
+        _log.debug("diag_log failed for %s", event, exc_info=True)
+
+
+def _resolve_rubric_adopt(
+    updates: Dict[str, Any],
+    *,
+    assignment_id: str,
+    student_id: str,
+    data_dir: Path,
+) -> Dict[str, Any]:
+    resolved = dict(updates)
+    adopt = resolved.pop("adopt_rubric_suggestion", None) is True
+    if not adopt:
+        return resolved
+    from .assignment_rubric_service import load_rubric_suggestion
+
+    suggestion = load_rubric_suggestion(data_dir, assignment_id, student_id)
+    has_override = "override_score" in resolved or "override_score_earned" in resolved
+    if not has_override:
+        score = suggestion.get("suggested_score")
+        if str(suggestion.get("status") or "") != "ready" or score is None:
+            raise TeacherGradeError(400, "rubric_suggestion_unscored")
+        resolved["override_score_earned"] = float(score)
+        if "comment" not in resolved:
+            resolved["comment"] = str(suggestion.get("comment") or "")
+    if "rubric_checks" not in resolved:
+        checks = suggestion.get("checks")
+        if isinstance(checks, list):
+            resolved["rubric_checks"] = checks
+    _emit_diag(
+        "teacher.grade.rubric_adopted",
+        {"assignment_id": assignment_id, "student_id": student_id},
+    )
+    return resolved
+
+
 def _normalize_excerpts(raw: Any) -> List[Dict[str, str]]:
     if raw is None:
         return []
@@ -158,6 +222,7 @@ def _empty_grade(assignment_id: str, student_id: str) -> Dict[str, Any]:
         "override_score_earned": None,
         "comment": "",
         "adopted_coach_excerpts": [],
+        "rubric_checks": [],
         "updated_at": "",
     }
 
@@ -212,6 +277,10 @@ def updates_from_grade_request(req: Any) -> Dict[str, Any]:
         updates["adopted_coach_excerpts"] = getattr(req, "adopted_coach_excerpts", None)
     if "attempt_id" in fields:
         updates["attempt_id"] = getattr(req, "attempt_id", None)
+    if "adopt_rubric_suggestion" in fields:
+        updates["adopt_rubric_suggestion"] = getattr(req, "adopt_rubric_suggestion", None)
+    if "rubric_checks" in fields:
+        updates["rubric_checks"] = getattr(req, "rubric_checks", None)
     return updates
 
 
@@ -226,6 +295,8 @@ def _apply_updates(existing: Dict[str, Any], updates: Dict[str, Any]) -> None:
         existing["adopted_coach_excerpts"] = _normalize_excerpts(updates.get("adopted_coach_excerpts"))
     if "attempt_id" in updates:
         existing["attempt_id"] = str(updates.get("attempt_id") or "").strip()
+    if "rubric_checks" in updates:
+        existing["rubric_checks"] = _normalize_rubric_checks(updates.get("rubric_checks"))
 
 
 def _persist_teacher_grade_sql(data_dir: Path, payload: Dict[str, Any]) -> None:
@@ -304,10 +375,17 @@ def save_teacher_grade_from_request(
     data_dir: Optional[Path] = None,
     request: Any,
 ) -> Dict[str, Any]:
+    resolved = _resolve_data_dir(data_dir)
+    updates = _resolve_rubric_adopt(
+        updates_from_grade_request(request),
+        assignment_id=str(assignment_id or "").strip(),
+        student_id=str(student_id or "").strip(),
+        data_dir=resolved,
+    )
     return save_teacher_grade(
         assignment_id,
         student_id,
         principal=principal,
-        data_dir=data_dir,
-        updates=updates_from_grade_request(request),
+        data_dir=resolved,
+        updates=updates,
     )

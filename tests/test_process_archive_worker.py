@@ -733,3 +733,90 @@ def test_rq_enqueue_process_archive_has_60s_timeout_and_no_retry() -> None:
     assert "job_timeout=PROCESS_ARCHIVE_JOB_TIMEOUT" in body
     assert "retry=" not in body
     assert "_enqueue_retry_job" not in body
+
+
+def test_summary_includes_quotes_and_excerpts() -> None:
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        path = _archive_path(root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        quotes = [
+            {"text": f"学生原话 {index}", "turn_ref": f"ses:{index}", "speaker": "student"}
+            for index in range(8)
+        ]
+        quotes.append(
+            {
+                "text": "手机号13812345678不要写进纪要",
+                "turn_ref": "ses:pii",
+                "speaker": "student",
+            }
+        )
+        excerpts = [
+            {"text": f"陪练摘录 {index}", "turn_ref": f"coach:{index}"} for index in range(7)
+        ]
+        types = [f"type_{index}" for index in range(6)]
+        stuck = [{"summary": f"卡点 {index}"} for index in range(4)]
+        path.write_text(
+            json.dumps(
+                {
+                    "schema": "assignment_process_archive/v1",
+                    "status": "frozen",
+                    "job_id": "parch_quotes",
+                    "quotes": quotes,
+                    "coach_comment_excerpts": excerpts,
+                    "reasoning_types": types,
+                    "stuck_points": stuck,
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        summary = read_process_archive_summary(root, "HW_1", "S1")
+        assert summary["status"] == "frozen"
+        assert summary["process_archive_id"] == "parch_quotes"
+        assert [item["text"] for item in summary["quotes"]] == [f"学生原话 {index}" for index in range(5)]
+        assert len(summary["quotes"]) == 5
+        assert [item["text"] for item in summary["coach_comment_excerpts"]] == [
+            f"陪练摘录 {index}" for index in range(5)
+        ]
+        assert summary["reasoning_types"] == [f"type_{index}" for index in range(5)]
+        assert [item["summary"] for item in summary["stuck_points"]] == ["卡点 0", "卡点 1"]
+        blob = json.dumps(summary, ensure_ascii=False)
+        assert "13812345678" not in blob
+
+
+def test_run_job_without_job_kind_still_freezes() -> None:
+    frozen: List[Dict[str, Any]] = []
+
+    def _freeze(payload: Dict[str, Any]) -> Dict[str, Any]:
+        frozen.append(dict(payload))
+        return {"status": "frozen"}
+
+    deps = _worker_deps(freeze_process_archive=_freeze)
+    run_process_archive_job(
+        {"assignment_id": "HW_1", "student_id": "S1", "reason": "submit"},
+        deps=deps,
+    )
+    assert frozen
+    assert frozen[0]["assignment_id"] == "HW_1"
+    assert "job_kind" not in frozen[0]
+
+
+def test_run_job_rubric_suggest_does_not_freeze() -> None:
+    frozen: List[Dict[str, Any]] = []
+    with TemporaryDirectory() as td:
+        deps = _worker_deps(
+            freeze_process_archive=lambda payload: frozen.append(dict(payload))
+            or {"status": "frozen"},
+            data_dir=Path(td),
+        )
+        run_process_archive_job(
+            {
+                "job_kind": "rubric_suggest",
+                "assignment_id": "HW_1",
+                "student_id": "S1",
+                "attempt_id": "submission_20260115_000000",
+            },
+            deps=deps,
+        )
+    assert frozen == []

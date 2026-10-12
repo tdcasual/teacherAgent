@@ -27,6 +27,7 @@ class ProcessArchiveWorkerDeps:
     thread_factory: Callable[..., Any]
     rq_enabled: Callable[[], bool]
     monotonic: Callable[[], float]
+    data_dir: Any = None
 
 
 def _thread_is_alive(thread: Any) -> bool:
@@ -66,11 +67,31 @@ def _drain_process_archive_batch(*, deps: ProcessArchiveWorkerDeps) -> List[Dict
 
 
 def run_process_archive_job(payload: Dict[str, Any], *, deps: ProcessArchiveWorkerDeps) -> None:
+    item = payload if isinstance(payload, dict) else {}
+    if str(item.get("job_kind") or "") == "rubric_suggest":
+        try:
+            from services.api.assignment_rubric_service import run_rubric_suggest_job
+
+            run_rubric_suggest_job(
+                item,
+                data_dir=deps.data_dir,
+                diag_log=deps.diag_log,
+            )
+        except Exception as exc:  # policy: allowed-broad-except
+            _log.debug("rubric suggest worker execution failed", exc_info=True)
+            deps.diag_log(
+                "assignment.rubric.suggest_failed",
+                {
+                    "assignment_id": str(item.get("assignment_id") or ""),
+                    "student_id": str(item.get("student_id") or ""),
+                    "error": str(exc)[:200],
+                },
+            )
+        return
     try:
-        deps.freeze_process_archive(payload if isinstance(payload, dict) else {})
+        deps.freeze_process_archive(item)
     except Exception as exc:  # policy: allowed-broad-except
         _log.debug("process archive worker execution failed", exc_info=True)
-        item = payload if isinstance(payload, dict) else {}
         deps.diag_log(
             "process_archive.partial",
             {

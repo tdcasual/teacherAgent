@@ -295,21 +295,43 @@ export type AssignmentProgressStudent = {
     comment?: string;
     override_score_earned?: number | null;
     adopted_coach_excerpts?: Array<{ text?: string }>;
+    rubric_checks?: Array<{ id?: string; pass?: boolean; note?: string }>;
   };
   process_archive_status?: string;
   process_archive?: {
     status?: string;
     stuck_points?: Array<{ summary?: string }>;
     process_archive_id?: string;
+    quotes?: Array<{ text?: string; turn_ref?: string; speaker?: string }>;
+    coach_comment_excerpts?: Array<{ text?: string; turn_ref?: string }>;
+    reasoning_types?: string[];
   };
   has_memory_proposal?: boolean;
   practice?: AssignmentPracticeStatus;
+  portrait?: {
+    recent_weak_kp?: string[];
+    next_focus?: string;
+    last_source?: string;
+    last_assignment_id?: string;
+  };
+  rubric_suggestion?: {
+    status?: 'none' | 'pending' | 'ready' | 'failed' | string;
+    suggested_score?: number | null;
+    max_score?: number | null;
+    checks?: Array<{ id?: string; pass?: boolean; note?: string }>;
+    comment?: string;
+    source?: string;
+  };
 };
 
 export type AssignmentProgress = {
   ok: boolean;
   assignment_id: string;
   assignment_kind?: AssignmentKind;
+  rubric?: {
+    source?: 'rubric.md' | 'none' | string;
+    items?: Array<{ id?: string; text?: string; max_points?: number | null }>;
+  };
   date?: string;
   scope?: string;
   class_name?: string;

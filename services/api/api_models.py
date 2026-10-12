@@ -113,6 +113,8 @@ class TeacherGradeRequest(BaseModel):
     comment: Optional[str] = None
     adopted_coach_excerpts: Optional[List[Dict[str, Any]]] = None
     attempt_id: Optional[str] = None
+    adopt_rubric_suggestion: Optional[bool] = None
+    rubric_checks: Optional[List[Dict[str, Any]]] = None
 
 
 class StudentVerifyRequest(BaseModel):

@@ -102,17 +102,35 @@ def read_process_archive(
 def read_process_archive_summary(
     data_dir: Path, assignment_id: str, student_id: str
 ) -> Dict[str, Any]:
+    empty: Dict[str, Any] = {
+        "status": "none",
+        "stuck_points": [],
+        "process_archive_id": "",
+        "quotes": [],
+        "coach_comment_excerpts": [],
+        "reasoning_types": [],
+    }
     rec = read_process_archive(data_dir, assignment_id, student_id)
     if not rec:
-        return {"status": "none", "stuck_points": [], "process_archive_id": ""}
+        return empty
     status = str(rec.get("status") or "none").strip().lower()
     if status not in _PROCESS_STATUSES:
         status = "none"
     stuck = rec.get("stuck_points")
+    quotes = rec.get("quotes")
+    excerpts = rec.get("coach_comment_excerpts")
+    types = rec.get("reasoning_types")
     return {
         "status": status,
-        "stuck_points": _filter_text_records(stuck, text_key="summary") if isinstance(stuck, list) else [],
+        "stuck_points": (
+            _filter_text_records(stuck, text_key="summary")[:2] if isinstance(stuck, list) else []
+        ),
         "process_archive_id": str(rec.get("job_id") or rec.get("process_archive_id") or ""),
+        "quotes": _filter_quotes(quotes)[:5] if isinstance(quotes, list) else [],
+        "coach_comment_excerpts": (
+            _filter_text_records(excerpts, text_key="text")[:5] if isinstance(excerpts, list) else []
+        ),
+        "reasoning_types": _filter_pii_strings(types)[:5] if isinstance(types, list) else [],
     }
 
 

@@ -152,6 +152,24 @@ def _student_submit_deps(core=None):
             enqueue=lambda payload: queue_runtime.enqueue_process_archive(payload, backend=backend),
         )
 
+    def _trigger_rubric(**kwargs: Any) -> Dict[str, Any]:
+        payload = {
+            "job_kind": "rubric_suggest",
+            "assignment_id": str(kwargs.get("assignment_id") or ""),
+            "student_id": str(kwargs.get("student_id") or ""),
+            "attempt_id": str(kwargs.get("attempt_id") or ""),
+        }
+        try:
+            queue_runtime.enqueue_process_archive(payload, backend=backend)
+            _ac.diag_log("assignment.rubric.enqueued", payload)
+        except Exception as exc:  # policy: allowed-broad-except
+            _log.debug("rubric suggest enqueue failed", exc_info=True)
+            _ac.diag_log(
+                "assignment.rubric.enqueue_failed",
+                {**payload, "error": str(exc)[:200]},
+            )
+        return payload
+
     def _load_submit_meta(assignment_id: str) -> dict | None:
         folder = _ac.resolve_assignment_dir(assignment_id)
         if not folder.exists():
@@ -178,6 +196,7 @@ def _student_submit_deps(core=None):
         diag_log=_ac.diag_log,
         save_upload_file=_ac.save_upload_file,
         trigger_process_archive=_trigger,
+        trigger_rubric_suggest=_trigger_rubric,
         data_dir=_ac.DATA_DIR,
         authorize_student_submit=lambda assignment_id, student_id: authorize_student_submit_assignment(
             assignment_id,

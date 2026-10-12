@@ -191,6 +191,8 @@ interface UseAssignmentWorkflowReturn {
       override_score?: number | null;
       comment?: string;
       adopted_coach_excerpts?: Array<{ text: string }>;
+      adopt_rubric_suggestion?: boolean;
+      rubric_checks?: Array<{ id?: string; pass?: boolean; note?: string }>;
     },
   ) => Promise<void>;
   refreshWorkflowWorkbench: () => void;
@@ -590,6 +592,8 @@ export function useAssignmentWorkflow(
         override_score?: number | null;
         comment?: string;
         adopted_coach_excerpts?: Array<{ text: string }>;
+        adopt_rubric_suggestion?: boolean;
+        rubric_checks?: Array<{ id?: string; pass?: boolean; note?: string }>;
       },
     ) => {
       const loadedId = String(params.progressData?.assignment_id || '').trim();

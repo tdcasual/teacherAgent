@@ -60,6 +60,7 @@ class StudentSubmitDeps:
     save_upload_file: Callable[[Any, Path], Awaitable[int]]
     sanitize_filename: Callable[[str], str] = _default_sanitize_filename
     trigger_process_archive: Optional[Callable[..., Dict[str, Any]]] = None
+    trigger_rubric_suggest: Optional[Callable[..., Any]] = None
     authorize_student_submit: Optional[Callable[[str, str], None]] = None
     data_dir: Optional[Path] = None
 
@@ -425,11 +426,12 @@ def _write_received_without_items_report(
     assignment_id: str,
     student_id: str,
     file_paths: list[str],
-) -> str:
+) -> tuple[str, str]:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    attempt_id = f"submission_{timestamp}"
     trees = [
-        deps.student_submissions_dir / assignment_id / student_id / f"submission_{timestamp}",
-        deps.student_submissions_dir / student_id / f"submission_{timestamp}",
+        deps.student_submissions_dir / assignment_id / student_id / attempt_id,
+        deps.student_submissions_dir / student_id / attempt_id,
     ]
     report: Dict[str, Any] = {
         "student_id": student_id,
@@ -453,7 +455,50 @@ def _write_received_without_items_report(
         "student.submit.received_without_items",
         {"student_id": student_id, "assignment_id": assignment_id},
     )
-    return "received_without_items"
+    return "received_without_items", attempt_id
+
+
+def _assignment_kind(deps: StudentSubmitDeps, assignment_id: str) -> str:
+    from .assignment_catalog_service import effective_assignment_kind
+
+    meta = _load_json_object(_assignment_folder(deps, assignment_id) / "meta.json")
+    return effective_assignment_kind(meta)
+
+
+def _maybe_trigger_rubric_suggest(
+    deps: StudentSubmitDeps,
+    assignment_id: str,
+    student_id: str,
+    attempt_id: str,
+) -> None:
+    if not attempt_id or _assignment_kind(deps, assignment_id) == "problem_set":
+        return
+    from .assignment_rubric_service import (
+        rubric_suggest_job_payload,
+        write_pending_rubric_suggestion,
+    )
+
+    write_pending_rubric_suggestion(_data_dir(deps), assignment_id, student_id)
+    trigger = deps.trigger_rubric_suggest
+    if trigger is None:
+        return
+    payload = rubric_suggest_job_payload(
+        assignment_id=assignment_id,
+        student_id=student_id,
+        attempt_id=attempt_id,
+    )
+    try:
+        trigger(**payload)
+    except Exception as exc:  # policy: allowed-broad-except
+        deps.diag_log(
+            "assignment.rubric.enqueue_failed",
+            {
+                "assignment_id": assignment_id,
+                "student_id": student_id,
+                "attempt_id": attempt_id,
+                "error": str(exc)[:200],
+            },
+        )
 
 
 def _write_derived_profile(
@@ -631,11 +676,14 @@ async def submit(
     file_paths = [str(path) for path in saved]
 
     if _has_zero_question_rows(deps, safe_assignment_id):
-        out = _write_received_without_items_report(
+        out, attempt_id = _write_received_without_items_report(
             deps=deps,
             assignment_id=safe_assignment_id,
             student_id=safe_student_id,
             file_paths=file_paths,
+        )
+        _maybe_trigger_rubric_suggest(
+            deps, safe_assignment_id, safe_student_id, attempt_id
         )
     else:
         script = deps.app_root / "scripts" / "grade_submission.py"

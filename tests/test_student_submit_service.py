@@ -881,6 +881,193 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(report.get("ungraded"), 1)
             self.assertIn("ocr_utils not available", str(report.get("error") or ""))
 
+    def _write_non_problem_set_zero_row(self, root: Path, *, kind: str = "scenario") -> None:
+        folder = root / "assignments" / "HW_1"
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "questions.csv").write_text(
+            "question_id,kp_id,difficulty,type,stem_ref,answer_ref,source,tags\n",
+            encoding="utf-8",
+        )
+        (folder / "requirements.json").write_text("{}", encoding="utf-8")
+        (folder / "meta.json").write_text(
+            json.dumps(
+                {
+                    "assignment_id": "HW_1",
+                    "assignment_kind": kind,
+                    "expected_students": ["S1"],
+                    "completion_policy": {"min_graded_total": 0, "requires_submission": True},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    async def test_zero_question_submit_writes_pending_rubric_suggestion(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_non_problem_set_zero_row(root)
+            deps = _deps(
+                root,
+                data_dir=root,
+                student_submissions_dir=root / "student_submissions",
+                compute_assignment_progress=lambda assignment_id, include_students: {
+                    "ok": True,
+                    "students": [
+                        {
+                            "student_id": "S1",
+                            "evidence": {
+                                "schema": "assignment_progress_evidence/v1",
+                                "signals": {
+                                    "submitted": True,
+                                    "best_graded_total": 0,
+                                    "best_score_earned": None,
+                                    "best_attempt_id": "submission_1",
+                                    "min_graded_total": 0,
+                                    "official_score": None,
+                                },
+                            },
+                        }
+                    ],
+                },
+            )
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="photo.jpg", content=b"1")],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+            self.assertTrue(result.get("ok"))
+            self.assertTrue(result.get("submitted"))
+            self.assertIsNone(result.get("official_score"))
+            suggestion_path = (
+                root / "student_submissions" / "HW_1" / "S1" / "rubric_suggestion.json"
+            )
+            self.assertTrue(suggestion_path.is_file())
+            payload = json.loads(suggestion_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload.get("schema"), "assignment_rubric_suggestion/v1")
+            self.assertEqual(payload.get("status"), "pending")
+            self.assertIsNone(payload.get("suggested_score"))
+
+    async def test_non_problem_set_submit_does_not_wait_for_rubric_llm(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_non_problem_set_zero_row(root)
+            enqueued = []
+            llm_calls = {"n": 0}
+
+            def _generate(*_args, **_kwargs):
+                llm_calls["n"] += 1
+                raise AssertionError("submit must not wait for rubric LLM")
+
+            def _trigger(**kwargs):
+                enqueued.append(dict(kwargs))
+                return {}
+
+            deps = _deps(
+                root,
+                data_dir=root,
+                student_submissions_dir=root / "student_submissions",
+                trigger_rubric_suggest=_trigger,
+                compute_assignment_progress=lambda assignment_id, include_students: _progress(
+                    submitted=True, score=0.0, attempt_id="submission_1"
+                ),
+            )
+            from unittest.mock import patch
+
+            with patch("llm_gateway.LLMGateway.generate", _generate):
+                result = await submit(
+                    student_id="S1",
+                    files=[_Upload(filename="photo.jpg", content=b"1")],
+                    assignment_id="HW_1",
+                    auto_assignment=False,
+                    deps=deps,
+                )
+            self.assertTrue(result.get("ok"))
+            self.assertEqual(llm_calls["n"], 0)
+            self.assertEqual(len(enqueued), 1)
+            self.assertEqual(enqueued[0]["job_kind"], "rubric_suggest")
+            self.assertTrue(str(enqueued[0]["attempt_id"]).startswith("submission_"))
+
+    async def test_rubric_suggest_enqueue_includes_attempt_id(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_non_problem_set_zero_row(root, kind="practical")
+            enqueued = []
+
+            def _trigger(**kwargs):
+                enqueued.append(dict(kwargs))
+                return {}
+
+            deps = _deps(
+                root,
+                data_dir=root,
+                student_submissions_dir=root / "student_submissions",
+                trigger_rubric_suggest=_trigger,
+                compute_assignment_progress=lambda assignment_id, include_students: _progress(
+                    submitted=True, score=0.0
+                ),
+            )
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="notes.md", content="# 观察记录".encode("utf-8"))],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+            self.assertTrue(result.get("ok"))
+            self.assertEqual(len(enqueued), 1)
+            payload = enqueued[0]
+            self.assertEqual(payload["job_kind"], "rubric_suggest")
+            self.assertEqual(payload["assignment_id"], "HW_1")
+            self.assertEqual(payload["student_id"], "S1")
+            attempt_id = str(payload["attempt_id"] or "")
+            self.assertTrue(attempt_id.startswith("submission_"))
+            attempt_dir = root / "student_submissions" / "HW_1" / "S1" / attempt_id
+            self.assertTrue(attempt_dir.is_dir())
+
+    async def test_non_problem_set_submit_skips_llm_without_text(self):
+        from services.api.assignment_rubric_service import run_rubric_suggest_job
+
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            attempt_id = "submission_20260115_000000"
+            attempt_dir = root / "student_submissions" / "HW_1" / "S1" / attempt_id
+            attempt_dir.mkdir(parents=True, exist_ok=True)
+            (attempt_dir / "photo.jpg").write_bytes(b"\xff\xd8")
+            llm_calls = {"n": 0}
+
+            class _Gateway:
+                def resolve_target(self):
+                    raise AssertionError("no-text path must not resolve LLM target")
+
+                def generate(self, *_args, **_kwargs):
+                    llm_calls["n"] += 1
+                    raise AssertionError("no-text path must not call LLM")
+
+            result = run_rubric_suggest_job(
+                {
+                    "job_kind": "rubric_suggest",
+                    "assignment_id": "HW_1",
+                    "student_id": "S1",
+                    "attempt_id": attempt_id,
+                },
+                data_dir=root,
+                gateway=_Gateway(),
+                diag_log=lambda _event, _payload: None,
+            )
+            self.assertEqual(result.get("status"), "ready")
+            self.assertEqual(result.get("source"), "heuristic_none")
+            self.assertIsNone(result.get("suggested_score"))
+            self.assertEqual(llm_calls["n"], 0)
+            saved = json.loads(
+                (root / "student_submissions" / "HW_1" / "S1" / "rubric_suggestion.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(saved.get("source"), "heuristic_none")
+            self.assertIsNone(saved.get("suggested_score"))
+            self.assertIn("无文本摘录", str(saved.get("comment") or ""))
+
 
 class StudentSubmitServiceImportGuardTest(unittest.TestCase):
     def test_student_submit_service_does_not_import_fastapi(self):

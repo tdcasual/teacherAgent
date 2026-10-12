@@ -272,6 +272,20 @@ def _assignment_submission_attempt_deps(core: Any | None = None):
 
 def _assignment_progress_deps(core: Any | None = None):
     _ac = _app_core(core)
+
+    def _load_student_profile(student_id: str) -> dict:
+        from ..paths import resolve_student_profile_path
+
+        try:
+            path = resolve_student_profile_path(student_id, core=_ac)
+        except ValueError:
+            return {}
+        try:
+            loaded = _ac.load_profile_file(path)
+        except Exception:  # policy: allowed-broad-except
+            return {}
+        return loaded if isinstance(loaded, dict) else {}
+
     return AssignmentProgressDeps(
         data_dir=_ac.DATA_DIR,
         load_assignment_meta=_ac.load_assignment_meta,
@@ -285,6 +299,7 @@ def _assignment_progress_deps(core: Any | None = None):
         atomic_write_json=_ac._atomic_write_json,
         today_iso=_today_iso,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        load_student_profile=_load_student_profile,
     )
 
 

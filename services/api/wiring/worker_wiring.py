@@ -176,6 +176,7 @@ def process_archive_worker_deps(core: Any | None = None) -> ProcessArchiveWorker
         thread_factory=_thread_factory_for_core(_ac),
         rq_enabled=lambda: _runtime_backend_is_rq(_ac),
         monotonic=time.monotonic,
+        data_dir=_ac.DATA_DIR,
     )
 
 

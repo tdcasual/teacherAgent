@@ -220,4 +220,169 @@ describe('AssignmentProgressSection', () => {
     );
     expect(screen.getByTestId('progress-practice-S1').textContent).toContain('不适用');
   });
+
+  it('posts merged adopted_coach_excerpts when adopting an excerpt', () => {
+    const saveStudentGrade = vi.fn(async () => undefined);
+    render(
+      <AssignmentProgressSection
+        {...baseProps}
+        saveStudentGrade={saveStudentGrade}
+        progressData={{
+          ok: true,
+          assignment_id: 'HW-1',
+          assignment_kind: 'scenario',
+          students: [
+            {
+              student_id: 'S1',
+              complete: true,
+              submission: { attempts: 1 },
+              official_score: null,
+              result: { attempts: 1, official_score: null, overdue: false, submitted: true },
+              process: { status: 'frozen' },
+              process_archive_status: 'frozen',
+              process_archive: {
+                status: 'frozen',
+                quotes: [{ text: '学生原话', speaker: 'student' }],
+                coach_comment_excerpts: [{ text: '新条目' }],
+              },
+              teacher_grade: { adopted_coach_excerpts: [{ text: '旧条目' }] },
+            },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '采纳为评语' }));
+    expect(saveStudentGrade).toHaveBeenCalledWith('S1', {
+      adopted_coach_excerpts: [{ text: '旧条目' }, { text: '新条目' }],
+    });
+  });
+
+  it('hides adopt-rubric button without a suggested score and shows it when scored', () => {
+    const saveStudentGrade = vi.fn(async () => undefined);
+    const { rerender } = render(
+      <AssignmentProgressSection
+        {...baseProps}
+        saveStudentGrade={saveStudentGrade}
+        progressData={{
+          ok: true,
+          assignment_id: 'HW-1',
+          assignment_kind: 'scenario',
+          rubric: { source: 'rubric.md', items: [{ id: '1', text: '能指出情景约束' }] },
+          students: [
+            {
+              student_id: 'S1',
+              complete: true,
+              submission: { attempts: 1 },
+              official_score: null,
+              result: { attempts: 1, official_score: null, overdue: false, submitted: true },
+              process: { status: 'none' },
+              rubric_suggestion: { status: 'ready', suggested_score: null, source: 'heuristic_none' },
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId('progress-assignment-rubric').textContent).toContain(
+      '能指出情景约束',
+    );
+    expect(screen.queryByTestId('progress-adopt-rubric-S1')).toBeNull();
+    expect(screen.getByText('请按量规目测后手填覆盖')).toBeTruthy();
+
+    rerender(
+      <AssignmentProgressSection
+        {...baseProps}
+        saveStudentGrade={saveStudentGrade}
+        progressData={{
+          ok: true,
+          assignment_id: 'HW-1',
+          assignment_kind: 'scenario',
+          rubric: { source: 'none', items: [] },
+          students: [
+            {
+              student_id: 'S1',
+              complete: true,
+              submission: { attempts: 1 },
+              official_score: null,
+              result: { attempts: 1, official_score: null, overdue: false, submitted: true },
+              process: { status: 'none' },
+              rubric_suggestion: { status: 'ready', suggested_score: 12, comment: '建议评语' },
+            },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByText('无量规，请老师覆盖')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('progress-adopt-rubric-S1'));
+    expect(saveStudentGrade).toHaveBeenCalledWith('S1', { adopt_rubric_suggestion: true });
+  });
+
+  it('does not show assignment rubric for problem_set', () => {
+    render(
+      <AssignmentProgressSection
+        {...baseProps}
+        progressData={{
+          ok: true,
+          assignment_id: 'HW-1',
+          assignment_kind: 'problem_set',
+          rubric: { source: 'rubric.md', items: [{ id: '1', text: '不该出现' }] },
+          students: [
+            {
+              student_id: 'S1',
+              complete: true,
+              submission: { attempts: 1 },
+              official_score: 8,
+              result: { attempts: 1, official_score: 8, overdue: false, submitted: true },
+              process: { status: 'none' },
+              practice: { assigned: 1, submitted: 0, open: 1, bank_miss: false },
+            },
+          ],
+        }}
+      />,
+    );
+    expect(screen.queryByTestId('progress-assignment-rubric')).toBeNull();
+    expect(screen.queryByTestId('progress-adopt-rubric-S1')).toBeNull();
+  });
+
+  it('renders teacher portrait snippet from full profile fields', () => {
+    render(
+      <AssignmentProgressSection
+        {...baseProps}
+        progressData={{
+          ok: true,
+          assignment_id: 'HW-1',
+          assignment_kind: 'scenario',
+          students: [
+            {
+              student_id: 'S1',
+              complete: true,
+              submission: { attempts: 1 },
+              official_score: null,
+              result: { attempts: 1, official_score: null, overdue: false, submitted: true },
+              process: { status: 'none' },
+              portrait: {
+                recent_weak_kp: ['受力分析'],
+                next_focus: '牛顿定律',
+                last_source: 'graded',
+              },
+            },
+            {
+              student_id: 'S2',
+              complete: false,
+              submission: { attempts: 0 },
+              official_score: null,
+              result: { attempts: 0, official_score: null, overdue: false, submitted: false },
+              process: { status: 'none' },
+              portrait: { recent_weak_kp: [], next_focus: '', last_source: '' },
+            },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByTestId('progress-portrait-S1').textContent).toContain('薄弱：受力分析');
+    expect(screen.getByTestId('progress-portrait-S1').textContent).toContain('下一步：牛顿定律');
+    expect(screen.getByTestId('progress-portrait-S1').textContent).toContain('最近：graded');
+    expect(screen.getByTestId('progress-portrait-S2').textContent).toContain('薄弱：暂无');
+  });
 });

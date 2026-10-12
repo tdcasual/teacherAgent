@@ -403,3 +403,102 @@ def test_compute_json_write_failure_rolls_back_sql(tmp_path: Path):
     assert result.get("status") == 500
     rows = _progress_sql_rows(tmp_path, "hw1")
     assert rows == []
+
+
+def test_portrait_reads_full_json_not_directory_listing(tmp_path: Path):
+    from services.api.paths import resolve_student_profile_path
+    from services.api.profile_service import load_profile_file
+
+    meta = _setup_assignment(tmp_path, "hw1", ["S1"])
+    listing = [{"student_id": "S1", "student_name": "甲", "class_name": "1班"}]
+    profile_path = tmp_path / "student_profiles" / "S1.json"
+    profile_path.parent.mkdir(parents=True, exist_ok=True)
+    profile_path.write_text(
+        json.dumps(
+            {
+                "student_id": "S1",
+                "student_name": "甲",
+                "class_name": "1班",
+                "recent_weak_kp": ["受力分析", "牛顿定律"],
+                "next_focus": "受力分析",
+                "practice_history": [
+                    {"assignment_id": "OLD", "source": "brief_fallback"},
+                    {"assignment_id": "NEW", "source": "graded", "practice_id": "practice_ab"},
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    def _load_student_profile(sid: str) -> dict:
+        try:
+            path = resolve_student_profile_path(
+                sid, core=type("Core", (), {"DATA_DIR": tmp_path})()
+            )
+        except ValueError:
+            return {}
+        loaded = load_profile_file(path)
+        return loaded if isinstance(loaded, dict) else {}
+
+    deps = _make_deps(
+        tmp_path,
+        load_assignment_meta=lambda _f: meta,
+        list_all_student_profiles=lambda: listing,
+        load_student_profile=_load_student_profile,
+        list_submission_attempts=lambda _a, _s: [{"graded_total": 1, "score_earned": 8}],
+    )
+    result = compute_assignment_progress("hw1", deps=deps)
+    student = result["students"][0]
+    assert "recent_weak_kp" not in listing[0]
+    assert "next_focus" not in listing[0]
+    assert student["portrait"]["recent_weak_kp"] == ["受力分析", "牛顿定律"]
+    assert student["portrait"]["next_focus"] == "受力分析"
+    assert student["portrait"]["last_source"] == "graded"
+    assert student["portrait"]["last_assignment_id"] == "NEW"
+
+
+def test_non_problem_set_progress_includes_rubric_not_practice(tmp_path: Path):
+    meta = _setup_assignment(tmp_path, "hw1", ["S1"])
+    meta["assignment_kind"] = "scenario"
+    folder = tmp_path / "assignments" / "hw1"
+    (folder / "meta.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+    (folder / "rubric.md").write_text(
+        "- 能指出情景约束\n- 能用自己的话解释因果\n",
+        encoding="utf-8",
+    )
+    suggestion_dir = tmp_path / "student_submissions" / "hw1" / "S1"
+    suggestion_dir.mkdir(parents=True, exist_ok=True)
+    (suggestion_dir / "rubric_suggestion.json").write_text(
+        json.dumps(
+            {
+                "schema": "assignment_rubric_suggestion/v1",
+                "status": "ready",
+                "suggested_score": 12.0,
+                "source": "llm",
+                "comment": "能指出约束",
+                "checks": [{"id": "1", "pass": True, "note": "ok"}],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    deps = _make_deps(
+        tmp_path,
+        load_assignment_meta=lambda _f: meta,
+        list_all_student_profiles=lambda: [
+            {"student_id": "S1", "student_name": "甲", "class_name": "1班"}
+        ],
+        list_submission_attempts=lambda _a, _s: [{"graded_total": 0, "received_without_items": True}],
+    )
+    result = compute_assignment_progress("hw1", deps=deps)
+    assert result["assignment_kind"] == "scenario"
+    assert result["rubric"]["source"] == "rubric.md"
+    assert [item["text"] for item in result["rubric"]["items"]] == [
+        "能指出情景约束",
+        "能用自己的话解释因果",
+    ]
+    student = result["students"][0]
+    assert "practice" not in student
+    assert student["rubric_suggestion"]["status"] == "ready"
+    assert student["rubric_suggestion"]["suggested_score"] == 12.0
