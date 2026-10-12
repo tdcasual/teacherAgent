@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 
 from fastapi.testclient import TestClient
 
+from services.api.auth_service import AuthPrincipal, reset_current_principal, set_current_principal
 from tests.helpers.app_factory import create_test_app
 
 
@@ -25,7 +26,15 @@ class StudentHistoryFlowTest(unittest.TestCase):
 
                 app_mod.get_core().student_profile_get = _fake_impl
 
-                res = client.get("/student/profile/S1")
+                missing = client.get("/student/profile/S1")
+                self.assertEqual(missing.status_code, 400)
+                self.assertEqual(missing.json().get("detail"), "principal_required")
+
+                token = set_current_principal(AuthPrincipal(actor_id="S1", role="student"))
+                try:
+                    res = client.get("/student/profile/S1")
+                finally:
+                    reset_current_principal(token)
                 self.assertEqual(res.status_code, 200)
                 self.assertEqual(captured.get("student_id"), "S1")
 

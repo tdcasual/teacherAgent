@@ -14,6 +14,7 @@ from services.api.assignment.store import (
     get_assignment,
     has_migration,
     published_ids,
+    teacher_owns_student_snapshot,
     upsert_assignment,
 )
 
@@ -230,3 +231,60 @@ def test_migrate_imports_progress_and_submissions_without_deleting_json(tmp_path
     assert (data_dir / "assignments" / "HW_1" / "meta.json").exists()
     assert progress_path.exists()
     assert grade_path.exists()
+
+
+def test_teacher_owns_student_snapshot_is_unbounded_and_ignores_drafts(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    conn = connect(data_dir)
+    try:
+        ensure(conn, data_dir=data_dir)
+        for index in range(51):
+            upsert_assignment(
+                conn,
+                {
+                    "assignment_id": f"HW_{index:03d}",
+                    "teacher_id": "t_zhang",
+                    "subject_id": "physics",
+                    "pack_id": "physics",
+                    "visibility_status": "published",
+                    "scope": "public",
+                    "expected_students": ["S_TARGET"] if index == 0 else ["OTHER"],
+                    "completion_policy": {},
+                },
+                now_iso=f"2026-02-01T00:{index:02d}:00+00:00",
+            )
+        upsert_assignment(
+            conn,
+            {
+                "assignment_id": "HW_DRAFT",
+                "teacher_id": "t_zhang",
+                "subject_id": "physics",
+                "pack_id": "physics",
+                "visibility_status": "draft",
+                "scope": "public",
+                "expected_students": ["S_DRAFT"],
+                "completion_policy": {},
+            },
+            now_iso="2026-02-02T00:00:00+00:00",
+        )
+        upsert_assignment(
+            conn,
+            {
+                "assignment_id": "HW_ARCH",
+                "teacher_id": "t_zhang",
+                "subject_id": "physics",
+                "pack_id": "physics",
+                "visibility_status": "archived",
+                "scope": "public",
+                "expected_students": ["S_ARCH"],
+                "completion_policy": {},
+            },
+            now_iso="2026-02-03T00:00:00+00:00",
+        )
+        assert teacher_owns_student_snapshot(conn, "t_zhang", "S_TARGET") is True
+        assert teacher_owns_student_snapshot(conn, "t_zhang", "S_ARCH") is True
+        assert teacher_owns_student_snapshot(conn, "t_zhang", "S_DRAFT") is False
+        assert teacher_owns_student_snapshot(conn, "t_zhang", "MISSING") is False
+        assert teacher_owns_student_snapshot(conn, "t_other", "S_TARGET") is False
+    finally:
+        conn.close()

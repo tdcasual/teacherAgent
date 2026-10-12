@@ -402,6 +402,12 @@ def resolve_student_scope(student_id: Optional[str], *, required_for_admin: bool
     return target or None
 
 
+def resolve_profile_read_scope(student_id: str) -> str:
+    from .auth.profile_read_scope_service import resolve_profile_read_scope as _impl
+
+    return _impl(student_id)
+
+
 def enforce_chat_job_access(job: Mapping[str, Any]) -> None:
     principal = require_principal(roles=("teacher", "student", "admin"))
     if principal is None or principal.role == "admin":
@@ -494,6 +500,7 @@ __all__ = [
     "principal_can_access_tenant",
     "resolve_teacher_scope",
     "resolve_student_scope",
+    "resolve_profile_read_scope",
     "enforce_chat_job_access",
     "enforce_upload_job_access",
     "bind_chat_request_to_principal",

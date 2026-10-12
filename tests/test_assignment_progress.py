@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from services.api.auth_service import AuthPrincipal, reset_current_principal, set_current_principal
 from tests.helpers.app_factory import create_test_app
 
 
@@ -722,7 +723,22 @@ class AssignmentProgressTest(unittest.TestCase):
             app_mod = load_app(tmp)
             with TestClient(app_mod.app) as client:
                 res = client.get("/student/profile/%2e%2e")
-                self.assertEqual(res.status_code, 404)
+                self.assertEqual(res.status_code, 400)
+                self.assertEqual(res.json().get("detail"), "principal_required")
+
+                token = set_current_principal(AuthPrincipal(actor_id="S1", role="student"))
+                try:
+                    other = client.get("/student/profile/%2e%2e")
+                finally:
+                    reset_current_principal(token)
+                self.assertEqual(other.status_code, 403)
+
+                self_token = set_current_principal(AuthPrincipal(actor_id="..", role="student"))
+                try:
+                    invalid = client.get("/student/profile/%2e%2e")
+                finally:
+                    reset_current_principal(self_token)
+                self.assertIn(invalid.status_code, {400, 404})
 
     def test_assignment_endpoints_treat_invalid_assignment_id_as_not_found(self):
         with TemporaryDirectory() as td:

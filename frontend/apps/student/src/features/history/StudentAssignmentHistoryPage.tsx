@@ -54,7 +54,9 @@ export default function StudentAssignmentHistoryPage({
             返回今日
           </button>
         </div>
-        {studentId ? <StudentPortraitCard apiBase={apiBase} studentId={studentId} /> : null}
+        {studentId ? (
+          <StudentPortraitCard apiBase={apiBase} studentId={studentId} items={items} />
+        ) : null}
         {loading ? <div className="text-xs text-muted">加载中…</div> : null}
         {error ? <div className="text-xs text-muted">{error}</div> : null}
         {!loading && !error && items.length === 0 ? (

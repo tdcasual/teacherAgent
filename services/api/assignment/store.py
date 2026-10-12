@@ -248,6 +248,46 @@ def list_assignment_rows(
     return list(rows)
 
 
+def _expected_student_ids(raw: Any) -> list[str]:
+    payload: Any = raw
+    if isinstance(payload, (bytes, bytearray)):
+        payload = payload.decode("utf-8", errors="ignore")
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError:
+            return []
+    if not isinstance(payload, list):
+        return []
+    return [_text(item) for item in payload if _text(item)]
+
+
+def teacher_owns_student_snapshot(
+    conn: sqlite3.Connection, teacher_id: str, student_id: str
+) -> bool:
+    """True if student_id is on any of this teacher's published/archived snapshots.
+
+    Unbounded: do not use list_assignment_rows(limit=50) as an authz oracle.
+    """
+    tid = _text(teacher_id)
+    sid = _text(student_id)
+    if not tid or not sid:
+        return False
+    try:
+        rows = conn.execute(
+            """
+            SELECT expected_students_json FROM assignments
+            WHERE teacher_id = ?
+              AND visibility_status IN ('published', 'archived')
+            """,
+            (tid,),
+        ).fetchall()
+    except sqlite3.Error:
+        _log.warning("snapshot lookup failed teacher_id=%s", tid, exc_info=True)
+        return False
+    return any(sid in _expected_student_ids(row["expected_students_json"]) for row in rows)
+
+
 def count_assignments(conn: sqlite3.Connection, *, teacher_id: Optional[str] = None) -> int:
     tid = _text(teacher_id)
     if tid:

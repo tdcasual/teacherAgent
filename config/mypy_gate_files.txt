@@ -27,3 +27,4 @@ services/api/chart_sandbox.py
 services/api/core_utils.py
 services/api/assignment/visibility.py
 services/api/subject_pack_service.py
+services/api/auth/profile_read_scope_service.py

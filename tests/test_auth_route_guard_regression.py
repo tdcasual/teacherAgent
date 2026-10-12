@@ -20,6 +20,8 @@ AUTH_GUARD_MARKERS = (
     "scoped_teacher_id(",
     "scoped_payload_teacher_id(",
     "_scoped_student_id(",
+    "resolve_profile_read_scope(",
+    "require_practice_actor(",
 )
 
 

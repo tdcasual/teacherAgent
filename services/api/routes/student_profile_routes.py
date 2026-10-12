@@ -5,7 +5,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import JSONResponse
 
-from ..auth_service import AuthError, resolve_student_scope
+from ..auth_service import AuthError, resolve_profile_read_scope, resolve_student_scope
 
 
 def _scoped_student_id(student_id: str | None) -> str:
@@ -22,7 +22,10 @@ def _scoped_student_id(student_id: str | None) -> str:
 def register_student_profile_routes(router: APIRouter, core: Any) -> None:
     @router.get("/student/profile/{student_id}")
     def get_profile(student_id: str) -> Any:
-        sid = _scoped_student_id(student_id)
+        try:
+            sid = resolve_profile_read_scope(student_id)
+        except AuthError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail)
         result = core.student_profile_get(sid)
         if result.get("error") in {"profile not found", "profile_not_found"}:
             raise HTTPException(status_code=404, detail="profile not found")
