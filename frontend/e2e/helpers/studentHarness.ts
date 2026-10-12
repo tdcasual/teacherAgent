@@ -13,14 +13,37 @@ type StudentHistoryBySession = Record<string, StudentHistoryMessage[]>
 type TodayAssignmentMock = {
   assignment_id: string
   date?: string
+  due_at?: string
   question_count?: number
   meta?: { target_kp?: string[] }
   delivery?: { mode?: string; files?: Array<{ name: string; url: string }> }
-} | null
+  assignment_kind?: string
+  title?: string
+  allow_practice?: boolean
+  submitted?: boolean
+  official_score?: number | null
+}
+
+type HistoryAssignmentMock = {
+  assignment_id: string
+  title?: string
+  teacher_id?: string
+  subject_id?: string
+  due_at?: string
+  visibility_status?: string
+  submitted?: boolean
+  official_score?: number | null
+  assignment_kind?: string
+  allow_practice?: boolean
+  practice?: { bank_miss?: boolean }
+}
 
 type SetupApiMocksOptions = {
   historyBySession?: StudentHistoryBySession
-  todayAssignment?: TodayAssignmentMock
+  todayAssignment?: TodayAssignmentMock | null
+  todayAssignments?: TodayAssignmentMock[]
+  historyAssignments?: HistoryAssignmentMock[]
+  studentProfile?: Record<string, unknown>
 }
 
 type OpenStudentAppOptions = {
@@ -76,13 +99,33 @@ export const setupBasicStudentApiMocks = async (
     main: [{ ts: new Date().toISOString(), role: 'assistant', content: '欢迎使用学生端' }],
     s2: [{ ts: new Date().toISOString(), role: 'assistant', content: '会话二内容' }],
   }
-  const todayAssignment = options.todayAssignment ?? null
+  const todayItems =
+    options.todayAssignments ??
+    (options.todayAssignment ? [options.todayAssignment] : [])
+  const historyAssignments = options.historyAssignments ?? []
+  const studentProfile = options.studentProfile ?? { student_id: 'S001' }
   let viewStatePayload = {
     title_map: {},
     hidden_ids: [],
     active_session_id: 'main',
     updated_at: new Date().toISOString(),
   }
+
+  const toTodayPayload = (item: TodayAssignmentMock) => ({
+    assignment_id: item.assignment_id,
+    teacher_id: 't_zhang',
+    subject_id: 'physics',
+    title: item.title || item.assignment_id,
+    due_at: item.due_at || item.date || '',
+    assignment_kind: item.assignment_kind,
+    allow_practice: item.allow_practice,
+    progress: {
+      submitted: Boolean(item.submitted),
+      overdue: false,
+      official_score: item.official_score ?? null,
+      process_archive_status: 'none',
+    },
+  })
 
   await page.route('http://localhost:8000/**', async (route) => {
     const request = route.request()
@@ -95,22 +138,8 @@ export const setupBasicStudentApiMocks = async (
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          date: todayAssignment?.date || new Date().toISOString().slice(0, 10),
-          assignments: todayAssignment
-            ? [{
-              assignment_id: todayAssignment.assignment_id,
-              teacher_id: 't_zhang',
-              subject_id: 'physics',
-              title: todayAssignment.assignment_id,
-              due_at: todayAssignment.date || '',
-              progress: {
-                submitted: false,
-                overdue: false,
-                official_score: null,
-                process_archive_status: 'none',
-              },
-            }]
-            : [],
+          date: todayItems[0]?.date || new Date().toISOString().slice(0, 10),
+          assignments: todayItems.map(toTodayPayload),
         }),
       })
       return
@@ -120,7 +149,34 @@ export const setupBasicStudentApiMocks = async (
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ assignments: [], total: 0, limit: 50, cursor: 0, has_more: false }),
+        body: JSON.stringify({
+          assignments: historyAssignments.map((item) => ({
+            assignment_id: item.assignment_id,
+            teacher_id: item.teacher_id || 't_zhang',
+            subject_id: item.subject_id || 'physics',
+            title: item.title || item.assignment_id,
+            due_at: item.due_at || '',
+            visibility_status: item.visibility_status || 'published',
+            submitted: Boolean(item.submitted),
+            official_score: item.official_score ?? null,
+            assignment_kind: item.assignment_kind,
+            allow_practice: item.allow_practice,
+            practice: item.practice || { bank_miss: false },
+          })),
+          total: historyAssignments.length,
+          limit: 50,
+          cursor: 0,
+          has_more: false,
+        }),
+      })
+      return
+    }
+
+    if (method === 'GET' && pathname.startsWith('/student/profile/')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(studentProfile),
       })
       return
     }
