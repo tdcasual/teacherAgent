@@ -1,10 +1,12 @@
 import type { FormEvent, KeyboardEvent, RefObject } from 'react';
 import type { RenderedMessage, VerifiedStudent } from '../../appTypes';
 import type { ComposerAttachment } from '../../../../shared/useChatAttachments';
+import { submitActionLabel } from '../../assignmentKind';
 import ChatMessages from './ChatMessages';
 import ChatComposer from './ChatComposer';
 
 type Props = {
+  assignmentKind?: string;
   renderedMessages: RenderedMessage[];
   sending: boolean;
   pendingChatJobId: string;
@@ -44,7 +46,7 @@ export default function ChatPanel(props: Props) {
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-white px-5 py-2 max-[900px]:px-3">
           <span className="text-xs text-muted">对话不会记为提交</span>
           <button type="button" className="student-supporting-link" onClick={props.onOpenSubmit}>
-            提交作业
+            {submitActionLabel(props.assignmentKind)}
           </button>
         </div>
       ) : null}

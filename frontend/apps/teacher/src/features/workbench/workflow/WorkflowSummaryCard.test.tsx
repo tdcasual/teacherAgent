@@ -17,7 +17,7 @@ const baseProps = (): WorkflowSummaryCardProps => ({
       { key: 'upload', label: '上传文件', state: 'done' },
       { key: 'parse', label: '解析', state: 'done' },
       { key: 'review', label: '审核草稿', state: 'active' },
-      { key: 'confirm', label: '创建作业', state: 'todo' },
+      { key: 'confirm', label: '发布草稿', state: 'todo' },
     ],
   },
   uploadJobInfo: null,
@@ -39,7 +39,7 @@ describe('WorkflowSummaryCard', () => {
     render(<WorkflowSummaryCard {...props} />);
 
     expect(screen.queryByText('状态总览')).toBeNull();
-    expect(screen.queryByText('下一步：继续审核草稿并确认创建作业')).toBeNull();
+    expect(screen.queryByText('下一步：继续审核草稿并发布草稿')).toBeNull();
     expect(screen.queryByText('动作目标')).toBeNull();
     expect(screen.getByRole('button', { name: '查看草稿' })).toBeTruthy();
     expect(screen.queryByText('状态：解析完成（待确认） · 作业编号：HW-20260314')).toBeNull();

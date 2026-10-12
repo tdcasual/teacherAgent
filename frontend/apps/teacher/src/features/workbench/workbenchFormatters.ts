@@ -7,8 +7,8 @@ export const formatUploadJobStatus = (job: UploadJobStatus) => {
     processing: '解析中',
     done: '解析完成（待确认）',
     failed: '解析失败',
-    confirmed: '已创建作业',
-    created: '已创建作业',
+    confirmed: '已发布草稿',
+    created: '已发布草稿',
     confirming: '确认中',
     cancelled: '已取消',
   };

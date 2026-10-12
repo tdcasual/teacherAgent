@@ -59,6 +59,7 @@ export default function UploadSection(props: Props) {
   }, [accessToken]);
 
   const {
+    assignmentKind,
     uploadCardCollapsed,
     setUploadCardCollapsed,
     formatUploadJobSummary,
@@ -138,7 +139,9 @@ export default function UploadSection(props: Props) {
       {uploadCardCollapsed ? null : (
         <>
           <p className="m-0 mb-3 text-muted">
-            上传后将在后台解析题目与答案，并生成作业 8 点描述。解析完成后需确认创建作业。
+            {assignmentKind === 'problem_set'
+              ? '上传后将解析题目与答案，并生成 8 点描述。解析完成后请发布草稿。'
+              : '上传后将从材料提取作业说明（brief）。非做题允许 0 题。解析完成后请发布草稿。'}
           </p>
           <form className="upload-form grid gap-[10px]" onSubmit={handleUploadAssignment}>
             <div className="grid gap-[10px] grid-cols-1">

@@ -658,6 +658,13 @@ export default function App() {
       null
     );
   }, [assignmentHistory.items, state.todayAssignments, submitAssignmentId]);
+  const selectedRow = useMemo(() => {
+    return (
+      state.todayAssignments.find((item) => item.assignment_id === state.selectedAssignmentId) ||
+      assignmentHistory.items.find((item) => item.assignment_id === state.selectedAssignmentId) ||
+      null
+    );
+  }, [assignmentHistory.items, state.todayAssignments, state.selectedAssignmentId]);
   const submitTitle = submitRow?.title || submitAssignmentId;
   const submitKind = submitRow ? coerceAssignmentKind(submitRow.assignment_kind) : undefined;
   const submitAllowPractice = submitRow
@@ -725,6 +732,7 @@ export default function App() {
   const chatContent = (
     <Suspense fallback={pageFallback}>
       <ChatPanel
+        assignmentKind={selectedRow ? coerceAssignmentKind(selectedRow.assignment_kind) : undefined}
         renderedMessages={renderedMessages}
         sending={state.sending}
         pendingChatJobId={state.pendingChatJob?.job_id || ''}

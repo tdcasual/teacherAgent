@@ -54,6 +54,7 @@ type StopKeyPropagation = (e: KeyboardEvent<HTMLElement>) => void;
 // ── Shared prop groups ─────────────────────────────────────────────────
 
 export type UploadSectionProps = {
+  assignmentKind: AssignmentKind;
   uploadCardCollapsed: boolean;
   setUploadCardCollapsed: Dispatch<SetStateAction<boolean>>;
 

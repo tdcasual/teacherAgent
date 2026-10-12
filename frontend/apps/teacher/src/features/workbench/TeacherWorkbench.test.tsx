@@ -50,7 +50,7 @@ const buildViewModel = (): TeacherWorkbenchViewModel => {
         { key: 'upload', label: '上传文件', state: 'done' },
         { key: 'parse', label: '解析', state: 'done' },
         { key: 'review', label: '审核草稿', state: 'active' },
-        { key: 'confirm', label: '创建作业', state: 'todo' },
+        { key: 'confirm', label: '发布草稿', state: 'todo' },
       ],
     },
     uploadMode: 'assignment',
@@ -78,7 +78,7 @@ describe('TeacherWorkbench header', () => {
     expect(screen.getByText('这里收纳主线摘要与辅助入口。')).toBeTruthy();
     expect(screen.queryByText('摘要入口')).toBeNull();
     expect(screen.getByText('待审核')).toBeTruthy();
-    expect(screen.queryByText('下一步：继续审核草稿并确认创建作业')).toBeNull();
+    expect(screen.queryByText('下一步：继续审核草稿并发布草稿')).toBeNull();
     expect(screen.getByText('当前焦点')).toBeTruthy();
     expect(screen.getAllByText('审核草稿')).toHaveLength(2);
     expect(screen.queryByText('状态：解析完成（待确认） · 作业编号：HW-20260314')).toBeNull();
@@ -135,7 +135,7 @@ describe('TeacherWorkbench header', () => {
     expect(
       screen.getByTestId('teacher-workbench-summary-card').getAttribute('data-workbench-tone'),
     ).toBe('summary');
-    expect(screen.queryByText('下一步：继续审核草稿并确认创建作业 · 下方继续处理。')).toBeNull();
+    expect(screen.queryByText('下一步：继续审核草稿并发布草稿 · 下方继续处理。')).toBeNull();
     expect(screen.queryByText('摘要入口')).toBeNull();
     expect(screen.getByTestId('teacher-workbench-focus-block').textContent).toContain('当前焦点');
     expect(screen.getByTestId('teacher-workbench-focus-block').textContent).toContain('审核草稿');

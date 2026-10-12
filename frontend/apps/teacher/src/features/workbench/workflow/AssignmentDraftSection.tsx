@@ -95,10 +95,10 @@ export default function AssignmentDraftSection(props: Props) {
             {uploadDraft.requirements_missing && uploadDraft.requirements_missing.length ? (
               <div className="text-danger font-semibold">
                 缺失项：{formatMissingRequirements(uploadDraft.requirements_missing)}
-                （补全后才能创建）
+                （补全后才能发布）
               </div>
             ) : (
-              <div className="text-success font-semibold">作业要求已补全，可创建。</div>
+              <div className="text-success font-semibold">作业要求已补全，可发布。</div>
             )}
           </div>
 
@@ -141,8 +141,8 @@ export default function AssignmentDraftSection(props: Props) {
               title={
                 uploadJobInfo && uploadJobInfo.status !== 'done'
                   ? uploadJobInfo.status === 'confirmed' || uploadJobInfo.status === 'created'
-                    ? '作业已创建，无需重复创建'
-                    : '解析未完成，暂不可创建'
+                    ? '作业已发布，无需重复发布'
+                    : '解析未完成，暂不可发布'
                   : uploadDraft.requirements_missing && uploadDraft.requirements_missing.length
                     ? `请先补全：${formatMissingRequirements(uploadDraft.requirements_missing)}`
                     : ''
@@ -150,12 +150,12 @@ export default function AssignmentDraftSection(props: Props) {
             >
               {uploadConfirming
                 ? uploadJobInfo && uploadJobInfo.status === 'confirming'
-                  ? `创建中…${uploadJobInfo.progress ?? 0}%`
-                  : '创建中…'
+                  ? `发布中…${uploadJobInfo.progress ?? 0}%`
+                  : '发布中…'
                 : uploadJobInfo &&
                     (uploadJobInfo.status === 'confirmed' || uploadJobInfo.status === 'created')
-                  ? '已创建'
-                  : '创建作业'}
+                  ? '已发布'
+                  : '发布草稿'}
             </button>
           </div>
 
@@ -323,6 +323,15 @@ export default function AssignmentDraftSection(props: Props) {
                           parseLineList(e.target.value).slice(0, 5),
                         )
                       }
+                      onKeyDown={stopKeyPropagation}
+                      rows={4}
+                    />
+                    <label htmlFor={`${fieldId}-rubric`}>量规（可选，每行一条）</label>
+                    <textarea
+                      id={`${fieldId}-rubric`}
+                      data-testid="draft-rubric"
+                      value={String(uploadDraft.requirements?.rubric || '')}
+                      onChange={(e) => updateDraftRequirement('rubric', e.target.value)}
                       onKeyDown={stopKeyPropagation}
                       rows={4}
                     />

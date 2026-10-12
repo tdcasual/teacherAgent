@@ -100,6 +100,7 @@ class AssignmentUploadDraftSaveServiceTest(unittest.TestCase):
             )
             self.assertTrue(result.get("ok"))
             self.assertEqual(result.get("requirements_missing"), [])
+            self.assertEqual(result.get("message"), "草稿已保存，将用于发布。")
             override_path = job_dir / "draft_override.json"
             self.assertTrue(override_path.exists())
             override = json.loads(override_path.read_text(encoding="utf-8"))
@@ -135,10 +136,83 @@ class AssignmentUploadDraftSaveServiceTest(unittest.TestCase):
             finally:
                 reset_current_principal(token)
             self.assertTrue(result.get("ok"))
+            self.assertEqual(result.get("message"), "草稿已保存，将用于发布。")
             saved = json.loads((folder / "requirements.json").read_text(encoding="utf-8"))
             self.assertEqual(saved.get("brief"), "实验室观察")
             self.assertTrue((folder / "brief.md").exists())
             self.assertTrue((folder / "questions.csv").exists())
+
+    def test_folder_save_writes_rubric_md_for_non_problem_set(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "data" / "assignments" / "A_RUBRIC"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "assignment_id": "A_RUBRIC",
+                        "teacher_id": "t_zhang",
+                        "visibility_status": "draft",
+                        "assignment_kind": "scenario",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            deps = self._deps(root, writes=[])
+            token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+            try:
+                result = save_assignment_folder_draft(
+                    "A_RUBRIC",
+                    {
+                        "subject": "物理",
+                        "topic": "情景",
+                        "grade_level": "初二",
+                        "brief": "实验室观察",
+                        "rubric": "- 能指出情景约束\n- 能说明步骤",
+                    },
+                    [],
+                    deps=deps,
+                )
+            finally:
+                reset_current_principal(token)
+            self.assertTrue(result.get("ok"))
+            saved = json.loads((folder / "requirements.json").read_text(encoding="utf-8"))
+            self.assertEqual(saved.get("rubric"), "- 能指出情景约束\n- 能说明步骤")
+            self.assertEqual(
+                (folder / "rubric.md").read_text(encoding="utf-8"),
+                "- 能指出情景约束\n- 能说明步骤\n",
+            )
+
+    def test_folder_save_skips_rubric_md_for_problem_set(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "data" / "assignments" / "A_PS"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "assignment_id": "A_PS",
+                        "teacher_id": "t_zhang",
+                        "visibility_status": "draft",
+                        "assignment_kind": "problem_set",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            deps = self._deps(root, writes=[])
+            token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+            try:
+                save_assignment_folder_draft(
+                    "A_PS",
+                    {"subject": "物理", "rubric": "- 不该写入"},
+                    [],
+                    deps=deps,
+                )
+            finally:
+                reset_current_principal(token)
+            self.assertFalse((folder / "rubric.md").exists())
 
     def test_folder_save_rejects_out_of_jail_bank_ref(self):
         with TemporaryDirectory() as td:

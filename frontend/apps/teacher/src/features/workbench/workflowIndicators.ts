@@ -52,7 +52,7 @@ export function buildTeacherWorkflowGuidance({
   if (tone === 'error') {
     if (activeStepKey === 'confirm' || activeStepKey === 'review') {
       return {
-        nextStepLabel: '下一步：回到草稿并处理异常后，再确认创建作业',
+        nextStepLabel: '下一步：回到草稿并处理异常后，再发布草稿',
         primaryActionLabel: '查看草稿',
         primaryActionTargetId: 'workflow-assignment-draft-section',
       };
@@ -83,7 +83,7 @@ export function buildTeacherWorkflowGuidance({
 
   if (activeStepKey === 'review') {
     return {
-      nextStepLabel: '下一步：继续审核草稿并确认创建作业',
+      nextStepLabel: '下一步：继续审核草稿并发布草稿',
       primaryActionLabel: '查看草稿',
       primaryActionTargetId: 'workflow-assignment-draft-section',
     };
@@ -91,7 +91,7 @@ export function buildTeacherWorkflowGuidance({
 
   if (activeStepKey === 'confirm') {
     return {
-      nextStepLabel: '下一步：确认创建作业并跟进学生完成情况',
+      nextStepLabel: '下一步：发布草稿并跟进学生完成情况',
       primaryActionLabel: '查看草稿',
       primaryActionTargetId: 'workflow-assignment-draft-section',
     };
@@ -147,7 +147,7 @@ export function buildAssignmentWorkflowIndicator({
     { key: 'upload', label: '上传文件', state: 'todo' },
     { key: 'parse', label: '解析', state: 'todo' },
     { key: 'review', label: '审核草稿', state: 'todo' },
-    { key: 'confirm', label: '创建作业', state: 'todo' },
+    { key: 'confirm', label: '发布草稿', state: 'todo' },
   ];
   const setState = (key: WorkflowStepItem['key'], state: WorkflowStepState) => {
     const step = steps.find((item) => item.key === key);
@@ -177,11 +177,11 @@ export function buildAssignmentWorkflowIndicator({
 
   if (status === 'confirmed' || status === 'created') {
     stage = 'completed';
-    label = '已创建作业';
+    label = '已发布草稿';
     tone = 'success';
   } else if (uploadConfirming || status === 'confirming') {
     stage = 'confirming';
-    label = '创建中';
+    label = '发布中';
     tone = 'active';
   } else if (status === 'done' || uploadDraft) {
     stage = 'review';
@@ -204,7 +204,7 @@ export function buildAssignmentWorkflowIndicator({
       label = status === 'cancelled' ? '流程取消' : '解析失败';
     } else if (uploadConfirming || status === 'confirming') {
       stage = 'failed-confirm';
-      label = '创建失败';
+      label = '发布失败';
     } else {
       stage = 'failed-review';
       label = '审核异常';

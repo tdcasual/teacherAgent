@@ -93,7 +93,7 @@ test('assignment confirm writes manifest and question artifacts consistently', a
     await page.goto('/')
     const confirmBtn = assignmentConfirmButton(page)
     await confirmBtn.click()
-    await expect(confirmBtn).toHaveText('已创建')
+    await expect(confirmBtn).toHaveText('已发布')
 
     const manifestPath = path.join(tmpRoot, 'data', 'assignments', assignmentId, 'manifest.json')
     const questionsPath = path.join(tmpRoot, 'data', 'assignments', assignmentId, 'questions.json')
@@ -218,7 +218,7 @@ test('assignment confirm remains idempotent in artifact output when clicked repe
     await confirmBtn.evaluate((node) => (node as HTMLButtonElement).click())
 
     await expect.poll(() => confirmCalls).toBe(1)
-    await expect(confirmBtn).toHaveText('已创建')
+    await expect(confirmBtn).toHaveText('已发布')
 
     const manifestPath = path.join(tmpRoot, 'data', 'assignments', assignmentId, 'manifest.json')
     await expect.poll(async () => {

@@ -147,6 +147,7 @@ describe('useAssignmentWorkflow folder draft locator', () => {
       }),
     );
 
+    const setDraftActionStatus = vi.fn();
     const { result } = renderHook(() =>
       useAssignmentWorkflow({
         ...baseParams,
@@ -155,7 +156,7 @@ describe('useAssignmentWorkflow folder draft locator', () => {
         uploadDraft: folderDraft,
         setUploadError: vi.fn(),
         setDraftActionError: vi.fn(),
-        setDraftActionStatus: vi.fn(),
+        setDraftActionStatus,
         setDraftSaving: vi.fn(),
         setUploadConfirming: vi.fn(),
         setUploadStatus: vi.fn(),
@@ -176,6 +177,7 @@ describe('useAssignmentWorkflow folder draft locator', () => {
     await act(async () => {
       await result.current.handleConfirmUpload();
     });
+    expect(setDraftActionStatus).toHaveBeenCalledWith('正在发布草稿…');
     const confirm = calls.find((call) => call.url.includes('/assignment/upload/confirm'));
     expect(confirm).toBeTruthy();
     expect(confirm?.body.job_id).toBeUndefined();

@@ -187,7 +187,7 @@ def _ensure_requirements_ready(
         {
             "error": "requirements_missing",
             "missing": missing,
-            "message": "作业要求未补全，无法创建作业。",
+            "message": "作业要求未补全，无法发布草稿。",
         },
     )
 
@@ -550,6 +550,7 @@ def confirm_assignment_upload(
     if kind != "problem_set" and not rows:
         ensure_questions_csv_header(out_dir / "questions.csv")
     _write_brief_markdown(out_dir, prepared.requirements)
+    _write_rubric_markdown(out_dir, prepared.requirements, assignment_kind=kind)
     student_ids_list, scope_val = _resolve_students_scope(job, deps)
     # Roster lives in the same sqlite file as assignments. Snapshot students
     # before BEGIN IMMEDIATE so confirm does not open a second connection
@@ -647,6 +648,20 @@ def _write_brief_markdown(out_dir: Path, requirements: Dict[str, Any]) -> None:
     if not brief:
         return
     (out_dir / "brief.md").write_text(brief + "\n", encoding="utf-8")
+
+
+def _write_rubric_markdown(
+    out_dir: Path,
+    requirements: Dict[str, Any],
+    *,
+    assignment_kind: str,
+) -> None:
+    if assignment_kind == "problem_set":
+        return
+    rubric = str((requirements or {}).get("rubric") or "").strip()
+    if not rubric:
+        return
+    (out_dir / "rubric.md").write_text(rubric + "\n", encoding="utf-8")
 
 
 def _load_json_dict(path: Path) -> Dict[str, Any]:
@@ -764,7 +779,7 @@ def _finalize_published_from_folder(
             {
                 "error": "requirements_missing",
                 "missing": missing,
-                "message": "作业要求未补全，无法创建作业。",
+                "message": "作业要求未补全，无法发布草稿。",
             },
         )
     if source == "bank" and kind != "problem_set":
@@ -816,6 +831,7 @@ def _finalize_published_from_folder(
             validate=False,
         )
     _write_brief_markdown(out_dir, requirements)
+    _write_rubric_markdown(out_dir, requirements, assignment_kind=kind)
     question_ids = [
         str(row.get("question_id") or "").strip()
         for row in read_question_bank(out_dir / "questions.csv")

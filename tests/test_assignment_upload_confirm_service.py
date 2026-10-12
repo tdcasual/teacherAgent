@@ -93,6 +93,7 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
                 )
             self.assertEqual(ctx.exception.status_code, 400)
             self.assertEqual(ctx.exception.detail.get("error"), "requirements_missing")
+            self.assertEqual(ctx.exception.detail.get("message"), "作业要求未补全，无法发布草稿。")
 
     def test_success_writes_meta_and_returns_ok(self):
         with TemporaryDirectory() as td:
@@ -398,6 +399,51 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
             self.assertEqual(meta.get("content_source"), "bank")
             self.assertEqual(meta.get("assignment_kind"), "problem_set")
             self.assertIn("allow_practice", meta.get("completion_policy") or {})
+
+    def test_finalize_writes_rubric_md_for_non_problem_set(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            self._write_draft_folder(
+                root,
+                "A_RUBRIC",
+                kind="scenario",
+                extra_req={"brief": "实验室观察", "rubric": "- 能指出情景约束"},
+            )
+            deps = self._deps(root, writes)
+            token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+            try:
+                result = _finalize_published_from_folder(
+                    "A_RUBRIC",
+                    strict_requirements=True,
+                    deps=deps,
+                )
+            finally:
+                reset_current_principal(token)
+            self.assertTrue(result.get("ok"))
+            rubric_path = root / "data" / "assignments" / "A_RUBRIC" / "rubric.md"
+            self.assertEqual(
+                rubric_path.read_text(encoding="utf-8"),
+                "- 能指出情景约束\n",
+            )
+
+    def test_finalize_skips_rubric_md_for_problem_set(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            self._write_draft_folder(
+                root,
+                "A_PS",
+                kind="problem_set",
+                extra_req={"rubric": "- 不该写入"},
+            )
+            deps = self._deps(root, writes)
+            token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+            try:
+                _finalize_published_from_folder("A_PS", strict_requirements=True, deps=deps)
+            finally:
+                reset_current_principal(token)
+            self.assertFalse((root / "data" / "assignments" / "A_PS" / "rubric.md").exists())
 
     def test_confirm_existing_draft_is_not_assignment_already_exists(self):
         with TemporaryDirectory() as td:

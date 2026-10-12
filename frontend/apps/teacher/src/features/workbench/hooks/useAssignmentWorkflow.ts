@@ -925,7 +925,7 @@ export function useAssignmentWorkflow(
     };
     setUploadError('');
     setDraftActionError('');
-    setDraftActionStatus('正在创建作业…');
+    setDraftActionStatus('正在发布草稿…');
     setUploadConfirming(true);
     try {
       // If parsing is still running, don't attempt to confirm.
@@ -936,7 +936,7 @@ export function useAssignmentWorkflow(
         uploadJobInfo.status !== 'confirmed' &&
         uploadJobInfo.status !== 'created'
       ) {
-        const message = '解析尚未完成，请等待解析完成后再创建作业。';
+        const message = '解析尚未完成，请等待解析完成后再发布草稿。';
         setUploadError(message);
         setDraftActionError(message);
         setUploadStatusPollNonce((n) => n + 1);
@@ -1006,7 +1006,7 @@ export function useAssignmentWorkflow(
       const data = await res.json();
       if (data && typeof data === 'object') {
         const lines: string[] = [];
-        lines.push(data.message || '作业已确认创建。');
+        lines.push(data.message || '作业已发布草稿。');
         if (data.assignment_id) lines.push(`作业编号：${data.assignment_id}`);
         if (data.question_count !== undefined) lines.push(`题目数量：${data.question_count}`);
         if (Array.isArray(data.requirements_missing) && data.requirements_missing.length) {

@@ -104,7 +104,7 @@ def save_assignment_upload_draft(
         "ok": True,
         "job_id": job_id,
         "requirements_missing": missing,
-        "message": "草稿已保存，将用于创建作业。",
+        "message": "草稿已保存，将用于发布。",
     }
 
 
@@ -215,6 +215,10 @@ def save_assignment_folder_draft(
         brief = str(current_requirements.get("brief") or "").strip()
         if brief:
             (out_dir / "brief.md").write_text(brief + "\n", encoding="utf-8")
+        if effective_assignment_kind(meta) != "problem_set":
+            rubric = str(current_requirements.get("rubric") or "").strip()
+            if rubric:
+                (out_dir / "rubric.md").write_text(rubric + "\n", encoding="utf-8")
     if questions is not None:
         if not isinstance(questions, list):
             raise AssignmentUploadDraftSaveError(400, "questions must be an array")
@@ -236,5 +240,5 @@ def save_assignment_folder_draft(
         "ok": True,
         "assignment_id": assignment_id,
         "requirements_missing": missing,
-        "message": "草稿已保存，将用于创建作业。",
+        "message": "草稿已保存，将用于发布。",
     }

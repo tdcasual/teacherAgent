@@ -114,6 +114,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
         />
         {props.contentSource === 'upload' ? (
           <UploadSection
+            assignmentKind={props.assignmentKind}
             uploadCardCollapsed={props.uploadCardCollapsed}
             setUploadCardCollapsed={props.setUploadCardCollapsed}
             formatUploadJobSummary={props.formatUploadJobSummary}

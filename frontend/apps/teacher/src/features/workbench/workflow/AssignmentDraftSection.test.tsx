@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AssignmentDraftSection from './AssignmentDraftSection';
 import type { AssignmentKind, UploadDraft } from '../../../appTypes';
@@ -120,11 +120,55 @@ describe('AssignmentDraftSection', () => {
     expect(screen.queryByText('题目与答案（可编辑）')).toBeNull();
     expect(screen.queryByTestId('draft-allow-practice')).toBeNull();
     expect(screen.getByText('需要讨论（陪练提示，不作为完成条件）')).toBeTruthy();
+    expect(screen.getByText(/补全后才能发布/)).toBeTruthy();
+    expect(screen.getByTestId('draft-rubric')).toBeTruthy();
+    expect(screen.getByLabelText('量规（可选，每行一条）')).toBeTruthy();
   });
 
   it('problem_set shows allow_practice and eight-point fields', () => {
     renderDraft(draft);
     expect(screen.getByTestId('draft-allow-practice')).toBeTruthy();
     expect(screen.getByLabelText('5) 易错点（每行一条，至少 4 条）')).toBeTruthy();
+    expect(screen.queryByTestId('draft-rubric')).toBeNull();
+  });
+
+  it('confirm button text is 发布草稿', () => {
+    renderDraft(draft);
+    expect(screen.getByTestId('assignment-confirm-button').textContent).toBe('发布草稿');
+    expect(screen.getByText('作业要求已补全，可发布。')).toBeTruthy();
+  });
+
+  it('confirm button uses publish copy while confirming and after success', () => {
+    const { rerender } = renderDraft(draft, 'problem_set', { uploadConfirming: true });
+    expect(screen.getByTestId('assignment-confirm-button').textContent).toBe('发布中…');
+
+    rerender(
+      <AssignmentDraftSection
+        {...baseProps()}
+        assignmentKind="problem_set"
+        uploadDraft={{ ...draft, assignment_kind: 'problem_set' }}
+        uploadJobInfo={{ job_id: 'job-1', status: 'created' }}
+      />,
+    );
+    const confirmed = screen.getByTestId('assignment-confirm-button') as HTMLButtonElement;
+    expect(confirmed.textContent).toBe('已发布');
+    expect(confirmed.title).toBe('作业已发布，无需重复发布');
+  });
+
+  it('non-problem_set draft-rubric writes requirements.rubric', () => {
+    const updateDraftRequirement = vi.fn();
+    renderDraft(
+      {
+        ...draft,
+        questions: [],
+        requirements: { subject: '物理', topic: '力学', grade_level: '高二', brief: '情景说明' },
+      },
+      'scenario',
+      { updateDraftRequirement },
+    );
+    fireEvent.change(screen.getByTestId('draft-rubric'), {
+      target: { value: '- 能指出情景约束' },
+    });
+    expect(updateDraftRequirement).toHaveBeenCalledWith('rubric', '- 能指出情景约束');
   });
 });

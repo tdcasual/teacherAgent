@@ -17,14 +17,14 @@ def ensure_assignment_upload_confirm_ready(job: Dict[str, Any]) -> Optional[Dict
             "ok": True,
             "assignment_id": job.get("assignment_id"),
             "status": "confirmed",
-            "message": "作业已创建（已确认）。",
+            "message": "作业已发布（已确认）。",
         }
     if status != "done":
         raise AssignmentUploadConfirmGateError(
             400,
             {
                 "error": "job_not_ready",
-                "message": "解析尚未完成，请稍后再创建作业。",
+                "message": "解析尚未完成，请稍后再发布草稿。",
                 "status": status,
                 "step": job.get("step"),
                 "progress": job.get("progress"),

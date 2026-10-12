@@ -167,7 +167,7 @@ test('mocked assignment how-to loop covers upload confirm today submit and progr
     const confirmBtn = assignmentConfirmButton(teacherPage)
     await expect(confirmBtn).toBeVisible()
     await expect(confirmBtn).toBeEnabled()
-    await expect(confirmBtn).toHaveText('创建作业')
+    await expect(confirmBtn).toHaveText('发布草稿')
     await expect(teacherPage.getByTestId('workflow-summary-status-chip').first()).toContainText('待审核')
 
     await confirmBtn.click()

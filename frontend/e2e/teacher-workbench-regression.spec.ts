@@ -126,7 +126,7 @@ test('workflow assignment confirm button enters confirming state and prevents du
       contentType: 'application/json',
       body: JSON.stringify({
         ok: true,
-        message: '作业已确认创建。',
+        message: '作业已发布草稿。',
         assignment_id: 'HW-READY-001',
         question_count: 1,
       }),
@@ -134,10 +134,10 @@ test('workflow assignment confirm button enters confirming state and prevents du
   })
 
   await page.goto('/')
-  const confirmBtn = page.locator('.confirm-btn')
+  const confirmBtn = page.getByTestId('assignment-confirm-button')
 
   await expect(confirmBtn).toBeVisible()
-  await expect(confirmBtn).toHaveText('创建作业')
+  await expect(confirmBtn).toHaveText('发布草稿')
   await expect(confirmBtn).toBeEnabled()
 
   await confirmBtn.click()
@@ -148,7 +148,7 @@ test('workflow assignment confirm button enters confirming state and prevents du
   })
 
   await expect.poll(() => confirmCalls).toBe(1)
-  await expect(confirmBtn).toHaveText('已创建')
+  await expect(confirmBtn).toHaveText('已发布')
 })
 
 

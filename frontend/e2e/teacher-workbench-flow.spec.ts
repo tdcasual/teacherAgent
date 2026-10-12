@@ -920,7 +920,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     const confirmBtn = assignmentConfirmButton(page)
     await confirmBtn.click()
 
-    await expect(confirmBtn).toHaveText('已创建')
+    await expect(confirmBtn).toHaveText('已发布')
     await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherActiveUpload'))).toBeNull()
   },
 

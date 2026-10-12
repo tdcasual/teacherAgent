@@ -10,6 +10,7 @@ afterEach(() => {
 });
 
 const baseProps = {
+  assignmentKind: 'problem_set' as const,
   uploadCardCollapsed: false,
   setUploadCardCollapsed: vi.fn(),
   formatUploadJobSummary: () => 'upload',
@@ -37,6 +38,22 @@ const baseProps = {
 };
 
 describe('UploadSection', () => {
+  it('gates upload copy by assignment kind', () => {
+    vi.spyOn(teacherAuth, 'readTeacherAccessToken').mockReturnValue('');
+    const { rerender } = render(<UploadSection {...baseProps} assignmentKind="problem_set" />);
+    expect(
+      screen.getByText('上传后将解析题目与答案，并生成 8 点描述。解析完成后请发布草稿。'),
+    ).toBeTruthy();
+
+    rerender(<UploadSection {...baseProps} assignmentKind="scenario" />);
+    expect(
+      screen.getByText(
+        '上传后将从材料提取作业说明（brief）。非做题允许 0 题。解析完成后请发布草稿。',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/8 点描述/)).toBeNull();
+  });
+
   it('falls back to a static subject list when roster is empty', () => {
     vi.spyOn(teacherAuth, 'readTeacherAccessToken').mockReturnValue('');
     render(<UploadSection {...baseProps} uploadSubjectId="generic" uploadScope="public" />);

@@ -326,7 +326,7 @@ test('assignment confirm job_not_ready error is surfaced with progress hint', as
   await page.goto('/')
 
   const assignmentSection = page.locator('#workflow-assignment-draft-section')
-  await assignmentSection.getByRole('button', { name: '创建作业' }).click()
+  await assignmentConfirmButton(page).click()
   await expect(assignmentSection.getByText('解析尚未完成（进度 67%）')).toBeVisible()
 })
 
@@ -549,10 +549,10 @@ test('assignment confirm server error keeps create button available for retry', 
   await page.goto('/')
 
   const assignmentSection = page.locator('#workflow-assignment-draft-section')
-  await assignmentSection.getByRole('button', { name: '创建作业' }).click()
+  await assignmentConfirmButton(page).click()
   await expect(assignmentSection.getByText('confirm assignment failed')).toBeVisible()
-  await expect(assignmentSection.getByRole('button', { name: '创建作业' })).toBeVisible()
-  await expect(assignmentSection.getByRole('button', { name: '创建作业' })).toBeEnabled()
+  await expect(assignmentConfirmButton(page)).toBeVisible()
+  await expect(assignmentConfirmButton(page)).toBeEnabled()
 })
 
 test('assignment confirm request payload includes job_id and strict_requirements', async ({ page }) => {
@@ -605,7 +605,7 @@ test('assignment confirm request payload includes job_id and strict_requirements
   })
 
   await page.goto('/')
-  await page.locator('#workflow-assignment-draft-section').getByRole('button', { name: '创建作业' }).click()
+  await assignmentConfirmButton(page).click()
 
   await expect.poll(() => capturedConfirmBody).not.toBeNull()
   expect(capturedConfirmBody.job_id).toBe(jobId)

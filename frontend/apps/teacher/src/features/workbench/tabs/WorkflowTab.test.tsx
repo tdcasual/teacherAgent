@@ -8,7 +8,9 @@ vi.mock('../workflow/WorkflowSummaryCard', () => ({
 }));
 
 vi.mock('../workflow/UploadSection', () => ({
-  default: () => <div>workflow-upload-section</div>,
+  default: (props: { assignmentKind?: string }) => (
+    <div>workflow-upload-section {props.assignmentKind}</div>
+  ),
 }));
 
 vi.mock('../workflow/BankPickForm', () => ({
@@ -69,7 +71,7 @@ const buildProps = (): WorkflowTabProps =>
         { key: 'upload', label: '上传文件', state: 'done' },
         { key: 'parse', label: '解析', state: 'done' },
         { key: 'review', label: '审核草稿', state: 'active' },
-        { key: 'confirm', label: '创建作业', state: 'todo' },
+        { key: 'confirm', label: '发布草稿', state: 'todo' },
       ],
     },
     formatUploadJobSummary: () => 'upload-summary',
@@ -161,9 +163,9 @@ describe('WorkflowTab', () => {
     expect(screen.getByText('必做动作')).toBeTruthy();
     expect(screen.getByText('必做')).toBeTruthy();
     expect(screen.getByText('按下面的主线动作继续处理。')).toBeTruthy();
-    expect(screen.queryByText('下一步：继续审核草稿并确认创建作业')).toBeNull();
+    expect(screen.queryByText('下一步：继续审核草稿并发布草稿')).toBeNull();
     expect(screen.getByTestId('workflow-kind-source-picker')).toBeTruthy();
-    expect(screen.getByText('workflow-upload-section')).toBeTruthy();
+    expect(screen.getByText('workflow-upload-section problem_set')).toBeTruthy();
     expect(screen.queryByText('workflow-bank-pick-form')).toBeNull();
     expect(screen.getByText('workflow-assignment-draft-section')).toBeTruthy();
     expect(screen.getByText('补充参考')).toBeTruthy();
@@ -186,6 +188,11 @@ describe('WorkflowTab', () => {
     expect(
       progressSection.compareDocumentPosition(timelineSection) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it('passes assignmentKind into UploadSection', () => {
+    render(<WorkflowTab {...buildProps()} assignmentKind="scenario" />);
+    expect(screen.getByText('workflow-upload-section scenario')).toBeTruthy();
   });
 
   it('disables bank unless problem_set', () => {
