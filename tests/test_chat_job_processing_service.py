@@ -324,6 +324,8 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 run_agent=_run_agent,
                 chat_extra_system_max_chars=800,
                 subject_prompt_overlay=lambda *_args, **_kwargs: "O",
+                # Empty verified stub: 800-char cap must keep 规则+清单, not a full profile.
+                build_verified_student_context=lambda _sid, _profile: "",
             )
             reply, role_hint, _last = compute_chat_reply_sync(
                 _Req(assignment_id="A1"), deps=deps
@@ -332,6 +334,7 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
             self.assertEqual(reply, "OK")
             self.assertEqual(role_hint, "student")
             self.assertIn("【学习规则】", extra)
+            self.assertIn("【考查清单】", extra)
             self.assertLessEqual(len(extra), 801)
             self.assertNotIn("SECRET_ANSWER_42", extra)
 
@@ -368,8 +371,11 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
             self.assertIn("assignment_kind=scenario", text)
             self.assertIn("content_source=ai", text)
             self.assertIn("只围绕老师 brief", text)
+            self.assertIn("【考查清单】", text)
+            self.assertIn("1. 讨论目标：说出控制变量", text)
             self.assertNotIn("补练题", text)
             self.assertNotIn("【作业题干】", text)
+            self.assertNotIn("讲解依据", text)
             for phrase in AUTHORING:
                 self.assertNotIn(phrase, text)
 

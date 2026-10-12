@@ -35,11 +35,91 @@ J) 自检：是否编造了数据块没有的年代、人物或故事情节。""
 G) 提醒提交实践照片；对话不能代替提交。""",
 }
 
+_CHECKLIST_HEADER = (
+    "【考查清单】只考查下列老师已发布材料。一次只问一项，等学生回答。"
+    "对话不是提交，也不是官方分。"
+)
+_CHECKLIST_ITEM_MAX = 200
+_CHECKLIST_ITEM_LIMIT = 8
+_CHECKLIST_BLOCK_MAX = 1500
+_EMPTY_GOAL_FALLBACK = {
+    "scenario": "1. 围绕老师 brief 考查理解，不要另编情节。",
+    "science_history": "1. 只根据老师材料问因果与概念。材料没写的年代/人名就说「材料里没写」。",
+    "practical": "1. 引导学生描述自己的步骤与现象，不编未做实验。",
+}
+_NO_STEM_ITEM = "数据块无题干，只根据作业总要求提问"
+_PRACTICAL_PHOTO_ITEM = "提醒提交实践照片。"
+
 
 def build_kind_coach_rules(kind: str) -> str:
     resolved = effective_assignment_kind({"assignment_kind": kind})
     extra = _KIND_RULE_EXTRAS.get(resolved) or _KIND_RULE_EXTRAS["problem_set"]
     return f"{_KIND_RULES_HEADER}\n{extra}"
+
+
+def _constraint_item(extra_constraints: str) -> str:
+    extra = str(extra_constraints or "").strip()
+    if not extra:
+        return ""
+    return _clip(f"遵守老师限制：{extra}", _CHECKLIST_ITEM_MAX)
+
+
+def _problem_set_checklist_items(stems: List[Dict[str, str]], *, room: int) -> List[str]:
+    if room <= 0:
+        return []
+    cleaned = [item for item in stems if isinstance(item, dict)]
+    if not cleaned:
+        return [_clip(_NO_STEM_ITEM, _CHECKLIST_ITEM_MAX)]
+    items: List[str] = []
+    for index, stem in enumerate(cleaned[:room], 1):
+        qid = str(stem.get("question_id") or "").strip()
+        kp_id = str(stem.get("kp_id") or "").strip()
+        items.append(
+            _clip(
+                f"{index}. 考查 {qid}（kp={kp_id}）：先让学生复述条件，再解释思路。禁止改题干或数值。",
+                _CHECKLIST_ITEM_MAX,
+            )
+        )
+    return items
+
+
+def _goal_checklist_items(goals: List[str], *, kind: str, room: int) -> List[str]:
+    if room <= 0:
+        return []
+    cleaned = [str(goal).strip() for goal in goals if str(goal or "").strip()]
+    if not cleaned:
+        fallback = _EMPTY_GOAL_FALLBACK.get(kind) or _EMPTY_GOAL_FALLBACK["scenario"]
+        return [_clip(fallback, _CHECKLIST_ITEM_MAX)]
+    return [
+        _clip(f"{index}. 讨论目标：{goal}", _CHECKLIST_ITEM_MAX)
+        for index, goal in enumerate(cleaned[:room], 1)
+    ]
+
+
+def build_exam_checklist(
+    *,
+    kind: str,
+    stems: list[dict[str, str]],
+    brief: str,
+    discussion_goals: list[str],
+    extra_constraints: str,
+) -> str:
+    del brief
+    resolved = effective_assignment_kind({"assignment_kind": kind})
+    constraint = _constraint_item(extra_constraints)
+    photo = _PRACTICAL_PHOTO_ITEM if resolved == "practical" else ""
+    reserved = int(bool(constraint)) + int(bool(photo))
+    room = max(0, _CHECKLIST_ITEM_LIMIT - reserved)
+    if resolved == "problem_set":
+        items = _problem_set_checklist_items(stems, room=room)
+    else:
+        items = _goal_checklist_items(discussion_goals, kind=resolved, room=room)
+    if photo:
+        items.append(_clip(photo, _CHECKLIST_ITEM_MAX))
+    if constraint:
+        items.append(constraint)
+    payload = "\n".join([_CHECKLIST_HEADER, *items[:_CHECKLIST_ITEM_LIMIT]])
+    return _clip(payload, _CHECKLIST_BLOCK_MAX)
 
 
 def _clip(text: str, max_chars: int) -> str:
@@ -353,12 +433,24 @@ def build_bound_student_assignment_extra(
     student_id: str,
 ) -> str:
     meta = detail.get("meta") if isinstance(detail.get("meta"), dict) else {}
+    requirements = (
+        detail.get("requirements") if isinstance(detail.get("requirements"), dict) else {}
+    )
     kind = effective_assignment_kind(meta)
+    stems = load_assignment_stems(folder, app_root=app_root)
     parts: List[str] = [build_kind_coach_rules(kind)]
+    checklist = build_exam_checklist(
+        kind=kind,
+        stems=stems,
+        brief=_brief_from_detail(detail, folder),
+        discussion_goals=_discussion_goals(requirements),
+        extra_constraints=str(requirements.get("extra_constraints") or ""),
+    )
+    if checklist:
+        parts.append(checklist)
     data_block = build_assignment_context(detail, folder=folder)
     if data_block:
         parts.append(data_block)
-    stems = load_assignment_stems(folder, app_root=app_root)
     stems_block = format_stems_block(stems)
     if stems_block:
         parts.append(stems_block)
