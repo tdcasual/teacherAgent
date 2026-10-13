@@ -1,13 +1,4 @@
-import {
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from 'react';
+import { lazy, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import {
   renderMarkdown,
   absolutizeChartImageUrls,
@@ -19,7 +10,6 @@ import {
   evictOldestEntries,
 } from '../../shared/useSmartAutoScroll';
 import type { Message, PendingChatJob, RenderedMessage } from './appTypes';
-import { coerceAssignmentKind, parseAllowPractice } from './assignmentKind';
 import { useStudentState, PENDING_CHAT_KEY_PREFIX, todayDate } from './hooks/useStudentState';
 import { useVerification } from './hooks/useVerification';
 import { useSessionManager } from './hooks/useSessionManager';
@@ -29,30 +19,14 @@ import { useAssignmentHistory } from './hooks/useAssignmentHistory';
 import { useStudentSendFlow } from './features/chat/useStudentSendFlow';
 import { selectComposerHint } from './features/chat/studentUiSelectors';
 import { buildStudentTodayHomeViewModel } from './features/home/studentTodayHomeState';
-import { matchReadyChatFiles } from './features/submit/studentSubmit';
 import { useStudentSessionSidebarState } from './features/session/useStudentSessionSidebarState';
 import { useStudentSessionViewStateSync } from './features/session/useStudentSessionViewStateSync';
-import {
-  isStudentMobileTab,
-  studentMobilePanelsFromTab,
-  studentMobileTabFromPanels,
-} from './features/layout/mobileShellState';
 import { useChatAttachments } from '../../shared/useChatAttachments';
-import { readFeatureFlag } from '../../shared/featureFlags';
-import { MobileTabBar, type MobileTabItem } from '../../shared/mobile/MobileTabBar';
-import {
-  MobileTabChatIcon,
-  MobileTabLearningIcon,
-  MobileTabSessionIcon,
-} from '../../shared/mobile/tabIcons';
-import StudentTopbar from './features/layout/StudentTopbar';
-import StudentLayout from './features/layout/StudentLayout';
-import SessionSidebar from './features/chat/SessionSidebar';
-import SessionSidebarDialogs from './features/chat/SessionSidebarDialogs';
-import SessionSidebarHistorySection from './features/chat/SessionSidebarHistorySection';
-import SessionSidebarLearningSection from './features/chat/SessionSidebarLearningSection';
+import { useStudentNavigation } from './hooks/useStudentNavigation';
+import { useStudentAppContent } from './features/layout/studentAppContent';
+import StudentDesktopShell from './features/layout/StudentDesktopShell';
+import StudentMobileShell from './features/layout/StudentMobileShell';
 
-const DESKTOP_BREAKPOINT = 900;
 const StudentTodayHome = lazy(() => import('./features/home/StudentTodayHome'));
 const StudentAssignmentHistoryPage = lazy(
   () => import('./features/history/StudentAssignmentHistoryPage'),
@@ -65,51 +39,10 @@ export default function App() {
   const { state, dispatch, refs, setActiveSession } = useStudentState();
   const appRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  const [viewportWidth, setViewportWidth] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth : 1280,
-  );
-  const [homeOpen, setHomeOpen] = useState(true);
-  const [assignmentHistoryOpen, setAssignmentHistoryOpen] = useState(false);
-  const [submitAssignmentId, setSubmitAssignmentId] = useState('');
   const [chatPickedFiles, setChatPickedFiles] = useState<File[]>([]);
-  const [mobileTab, setMobileTab] = useState<'chat' | 'sessions' | 'learning'>('learning');
-  const [mobileSessionListOpen, setMobileSessionListOpen] = useState(false);
   const { messagesRef, endRef, isNearBottom, scrollToBottom, autoScroll } = useSmartAutoScroll();
   const { saveScrollHeight, restoreScrollPosition } = useScrollPositionLock(messagesRef);
-  const isMobileLayout = viewportWidth <= DESKTOP_BREAKPOINT;
-  const mobileShellV2Enabled = useMemo(() => {
-    const source: Record<string, string | undefined> = {
-      mobileShellV2: import.meta.env.VITE_MOBILE_SHELL_V2_STUDENT,
-    };
-    if (typeof window !== 'undefined') {
-      try {
-        const localOverride = window.localStorage.getItem('studentMobileShellV2');
-        if (localOverride != null) source.mobileShellV2 = localOverride;
-      } catch {
-        // ignore localStorage read failures
-      }
-    }
-    return readFeatureFlag('mobileShellV2', true, source);
-  }, []);
-  const studentUseMobileShellV2 = mobileShellV2Enabled && isMobileLayout;
-  const mobileTabItems = useMemo<MobileTabItem[]>(
-    () => [
-      { id: 'chat', label: '聊天', icon: <MobileTabChatIcon /> },
-      { id: 'sessions', label: '会话', icon: <MobileTabSessionIcon /> },
-      { id: 'learning', label: '学习', icon: <MobileTabLearningIcon /> },
-    ],
-    [],
-  );
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const onResize = () => setViewportWidth(window.innerWidth);
-    onResize();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
-  // ── Hooks ──
   const { viewStateSyncReady } = useStudentSessionViewStateSync({
     state,
     dispatch,
@@ -135,19 +68,12 @@ export default function App() {
     refreshSessions: sessionManager.refreshSessions,
   });
 
-  const {
-    toggleSessionMenu,
-    setSessionMenuRef,
-    setSessionMenuTriggerRef,
-    handleSessionMenuTriggerKeyDown,
-    handleSessionMenuKeyDown,
-  } = useStudentSessionSidebarState({
+  const sidebarMenu = useStudentSessionSidebarState({
     sidebarOpen: state.sidebarOpen,
     openSessionMenuId: state.openSessionMenuId,
     dispatch,
   });
 
-  // ── Rendered messages (markdown cache) ──
   const renderedMessages = useMemo(() => {
     const cache = refs.markdownCacheRef.current;
     evictOldestEntries(cache);
@@ -173,12 +99,10 @@ export default function App() {
     refs.markdownCacheRef,
   ]);
 
-  // ── Auto-scroll on new messages ──
   useEffect(() => {
     autoScroll();
   }, [state.messages, state.sending, autoScroll]);
 
-  // ── Textarea auto-resize ──
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -187,7 +111,6 @@ export default function App() {
     el.style.height = `${next}px`;
   }, [state.input, state.verifiedStudent, state.pendingChatJob?.job_id]);
 
-  // ── Default session selection ──
   useEffect(() => {
     if (!state.verifiedStudent?.student_id) return;
     if (!viewStateSyncReady) return;
@@ -203,7 +126,6 @@ export default function App() {
     setActiveSession,
   ]);
 
-  // ── Auto-load session messages ──
   useEffect(() => {
     if (!state.verifiedStudent?.student_id) return;
     if (!state.activeSessionId) return;
@@ -241,12 +163,10 @@ export default function App() {
     state.sessionCursor,
   ]);
 
-  // ── Sync activeSessionRef ──
   useEffect(() => {
     refs.activeSessionRef.current = state.activeSessionId;
   }, [state.activeSessionId, refs.activeSessionRef]);
 
-  // ── Send flow (wrapper setters for compatibility) ──
   const setSending = useCallback(
     (v: boolean) => dispatch({ type: 'SET', field: 'sending', value: v }),
     [dispatch],
@@ -371,7 +291,6 @@ export default function App() {
     skipAutoSessionLoadIdRef: refs.skipAutoSessionLoadIdRef,
   });
 
-  // ── Composer hint + keyboard ──
   const composerHint = useMemo(
     () =>
       selectComposerHint({
@@ -381,12 +300,6 @@ export default function App() {
       }),
     [state.pendingChatJob?.job_id, state.sending, state.verifiedStudent],
   );
-
-  const assignmentHistory = useAssignmentHistory({
-    apiBase: state.apiBase,
-    studentId: state.verifiedStudent?.student_id || '',
-    enabled: assignmentHistoryOpen,
-  });
 
   const todayHomeViewModel = useMemo(
     () =>
@@ -430,471 +343,89 @@ export default function App() {
     ],
   );
 
-  useEffect(() => {
-    if (!studentUseMobileShellV2) return;
-    const nextTab = studentMobileTabFromPanels({
-      sessionListOpen: mobileSessionListOpen,
-      verifyOpen: state.verifyOpen,
-      homeOpen,
-    });
-    if (mobileTab !== nextTab) setMobileTab(nextTab);
-  }, [studentUseMobileShellV2, state.verifyOpen, homeOpen, mobileSessionListOpen, mobileTab]);
-
-  useEffect(() => {
-    if (state.verifiedStudent?.student_id) return;
-    setHomeOpen(true);
-  }, [state.verifiedStudent?.student_id]);
-
-  const handleMobileTabChange = useCallback(
-    (tabId: string) => {
-      if (!isStudentMobileTab(tabId)) return;
-      setMobileTab(tabId);
-      if (!studentUseMobileShellV2) return;
-      const nextPanels = studentMobilePanelsFromTab(tabId);
-      setHomeOpen(nextPanels.homeOpen);
-      setMobileSessionListOpen(nextPanels.sessionListOpen);
-      if (state.verifyOpen !== nextPanels.verifyOpen) {
-        dispatch({ type: 'SET', field: 'verifyOpen', value: nextPanels.verifyOpen });
-      }
-      if (state.sidebarOpen) {
-        dispatch({ type: 'SET', field: 'sidebarOpen', value: false });
-      }
-    },
-    [studentUseMobileShellV2, state.sidebarOpen, state.verifyOpen, dispatch],
-  );
-
-  const openTodayHome = useCallback(() => {
-    setHomeOpen(true);
-    setSubmitAssignmentId('');
-    setAssignmentHistoryOpen(false);
-    if (!studentUseMobileShellV2) return;
-    setMobileTab('learning');
-    setMobileSessionListOpen(false);
-    if (state.sidebarOpen) {
-      dispatch({ type: 'SET', field: 'sidebarOpen', value: false });
-    }
-  }, [dispatch, state.sidebarOpen, studentUseMobileShellV2]);
-
-  const openExecutionState = useCallback(() => {
-    setHomeOpen(false);
-    if (!studentUseMobileShellV2) return;
-    setMobileTab('chat');
-    setMobileSessionListOpen(false);
-    if (state.sidebarOpen) {
-      dispatch({ type: 'SET', field: 'sidebarOpen', value: false });
-    }
-  }, [dispatch, state.sidebarOpen, studentUseMobileShellV2]);
-
-  const handleOpenAssignment = useCallback(
-    (assignmentId: string) => {
-      const aid = assignmentId.trim();
-      if (!aid) return;
-      dispatch({ type: 'SET', field: 'selectedAssignmentId', value: aid });
-      setSubmitAssignmentId('');
-      setActiveSession(aid);
-      openExecutionState();
-    },
-    [dispatch, openExecutionState, setActiveSession],
-  );
-
-  const handleOpenSubmit = useCallback(
-    (assignmentId: string) => {
-      const aid = assignmentId.trim();
-      if (!aid) return;
-      dispatch({ type: 'SET', field: 'selectedAssignmentId', value: aid });
-      setSubmitAssignmentId(aid);
-      if (!studentUseMobileShellV2) return;
-      setHomeOpen(true);
-      setMobileTab('learning');
-      setMobileSessionListOpen(false);
-      if (state.sidebarOpen) {
-        dispatch({ type: 'SET', field: 'sidebarOpen', value: false });
-      }
-    },
-    [dispatch, state.sidebarOpen, studentUseMobileShellV2],
-  );
-
-  const handlePrimaryHomeAction = useCallback(() => {
-    if (!state.verifiedStudent) {
-      dispatch({ type: 'SET', field: 'verifyOpen', value: true });
-      return;
-    }
-    if (
-      todayHomeViewModel.status === 'empty' ||
-      todayHomeViewModel.status === 'generating' ||
-      todayHomeViewModel.status === 'pending_generation'
-    )
-      return;
-    if (todayHomeViewModel.status === 'submitted') {
-      setAssignmentHistoryOpen(true);
-      return;
-    }
-    const firstId = todayHomeViewModel.items[0]?.assignment_id || '';
-    if (firstId) {
-      handleOpenAssignment(firstId);
-      return;
-    }
-    openExecutionState();
-  }, [
+  const nav = useStudentNavigation({
     dispatch,
-    handleOpenAssignment,
-    openExecutionState,
-    state.verifiedStudent,
-    todayHomeViewModel.items,
-    todayHomeViewModel.status,
-  ]);
+    verifiedStudent: state.verifiedStudent,
+    sidebarOpen: state.sidebarOpen,
+    verifyOpen: state.verifyOpen,
+    setActiveSession,
+    todayHomeViewModel,
+    startNewStudentSession: sessionManager.startNewStudentSession,
+  });
 
-  const handleOpenAssignmentHistory = useCallback(() => {
-    setSubmitAssignmentId('');
-    setAssignmentHistoryOpen(true);
-    setHomeOpen(true);
-    if (!studentUseMobileShellV2) return;
-    setMobileTab('learning');
-    setMobileSessionListOpen(false);
-    if (state.sidebarOpen) {
-      dispatch({ type: 'SET', field: 'sidebarOpen', value: false });
-    }
-  }, [dispatch, state.sidebarOpen, studentUseMobileShellV2]);
+  const assignmentHistory = useAssignmentHistory({
+    apiBase: state.apiBase,
+    studentId: state.verifiedStudent?.student_id || '',
+    enabled: nav.assignmentHistoryOpen,
+  });
 
-  const handleOpenHistory = useCallback(() => {
-    setHomeOpen(false);
-    if (studentUseMobileShellV2) {
-      setMobileSessionListOpen(true);
-      setMobileTab('sessions');
-      if (state.sidebarOpen) {
-        dispatch({ type: 'SET', field: 'sidebarOpen', value: false });
-      }
-      return;
-    }
-    dispatch({ type: 'SET', field: 'sidebarOpen', value: true });
-  }, [dispatch, state.sidebarOpen, studentUseMobileShellV2]);
+  const content = useStudentAppContent({
+    state,
+    dispatch,
+    handleVerify,
+    pageFallback,
+    pages: { StudentTodayHome, StudentAssignmentHistoryPage, StudentSubmitPanel, ChatPanel },
+    assignmentHistory,
+    todayHomeViewModel,
+    navigation: nav,
+    sessionManager,
+    sidebarMenu,
+    chat: {
+      renderedMessages,
+      messagesRef,
+      endRef,
+      isNearBottom,
+      scrollToBottom,
+      inputRef,
+      setInput,
+      handleInputKeyDown,
+      handleSend,
+      composerHint,
+      attachments,
+      uploadingAttachments,
+      hasSendableAttachments,
+      onPickFiles: handlePickFiles,
+      onRemoveAttachment: handleRemoveAttachment,
+      chatPickedFiles,
+    },
+  });
 
-  const handleOpenFreeChat = useCallback(() => {
-    dispatch({ type: 'SET', field: 'selectedAssignmentId', value: '' });
-    setSubmitAssignmentId('');
-    setAssignmentHistoryOpen(false);
-    setActiveSession(`general_${todayDate()}`);
-    openExecutionState();
-  }, [dispatch, openExecutionState, setActiveSession]);
-
-  const handleStartNewStudentSession = useCallback(() => {
-    openExecutionState();
-    sessionManager.startNewStudentSession();
-  }, [openExecutionState, sessionManager]);
-
-  const heroDateLabel = useMemo(() => {
-    const now = new Date();
-    return now.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' });
-  }, []);
-
-  const sessionSidebarContent = (
-    <SessionSidebar
-      apiBase={state.apiBase}
-      sidebarOpen={state.sidebarOpen}
-      showHistorySection={!studentUseMobileShellV2 || mobileTab === 'sessions'}
-      dispatch={dispatch}
-      verifiedStudent={state.verifiedStudent}
-      historyLoading={state.historyLoading}
-      historyError={state.historyError}
-      historyHasMore={state.historyHasMore}
-      refreshSessions={sessionManager.refreshSessions}
-      showArchivedSessions={state.showArchivedSessions}
-      historyQuery={state.historyQuery}
-      visibleSessionCount={sessionManager.visibleSessions.length}
-      groupedSessions={sessionManager.groupedSessions}
-      deletedSessionIds={state.deletedSessionIds}
-      activeSessionId={state.activeSessionId}
-      onSelectSession={(sessionId) => {
-        setHomeOpen(false);
-        if (studentUseMobileShellV2) {
-          setMobileSessionListOpen(false);
-          setMobileTab('chat');
-        }
-        void sessionManager.selectStudentSession(sessionId);
-      }}
-      getSessionTitle={sessionManager.getSessionTitle}
-      openSessionMenuId={state.openSessionMenuId}
-      toggleSessionMenu={toggleSessionMenu}
-      handleSessionMenuTriggerKeyDown={handleSessionMenuTriggerKeyDown}
-      handleSessionMenuKeyDown={handleSessionMenuKeyDown}
-      setSessionMenuTriggerRef={setSessionMenuTriggerRef}
-      setSessionMenuRef={setSessionMenuRef}
-      renameSession={sessionManager.renameSession}
-      toggleSessionArchive={sessionManager.toggleSessionArchive}
-      sessionHasMore={state.sessionHasMore}
-      sessionLoading={state.sessionLoading}
-      sessionCursor={state.sessionCursor}
-      loadSessionMessages={sessionManager.loadSessionMessages}
-      sessionError={state.sessionError}
-      verifyOpen={state.verifyOpen}
-      handleVerify={handleVerify}
-      nameInput={state.nameInput}
-      classInput={state.classInput}
-      credentialInput={state.credentialInput}
-      verifying={state.verifying}
-      verifyError={state.verifyError}
-      verifyInfo={state.verifyInfo}
-      todayAssignment={state.todayAssignment}
-      todayAssignments={state.todayAssignments}
-      assignmentLoading={state.assignmentLoading}
-      assignmentError={state.assignmentError}
-      resetVerification={sessionManager.resetVerification}
-      startNewStudentSession={handleStartNewStudentSession}
-      renameDialogSessionId={state.renameDialogSessionId}
-      archiveDialogSessionId={state.archiveDialogSessionId}
-      archiveDialogActionLabel={sessionManager.archiveDialogActionLabel}
-      archiveDialogIsArchived={sessionManager.archiveDialogIsArchived}
-      cancelRenameDialog={sessionManager.cancelRenameDialog}
-      confirmRenameDialog={sessionManager.confirmRenameDialog}
-      cancelArchiveDialog={sessionManager.cancelArchiveDialog}
-      confirmArchiveDialog={sessionManager.confirmArchiveDialog}
-    />
-  );
-
-  const submitRow = useMemo(() => {
+  if (nav.studentUseMobileShellV2) {
     return (
-      state.todayAssignments.find((item) => item.assignment_id === submitAssignmentId) ||
-      assignmentHistory.items.find((item) => item.assignment_id === submitAssignmentId) ||
-      null
-    );
-  }, [assignmentHistory.items, state.todayAssignments, submitAssignmentId]);
-  const selectedRow = useMemo(() => {
-    return (
-      state.todayAssignments.find((item) => item.assignment_id === state.selectedAssignmentId) ||
-      assignmentHistory.items.find((item) => item.assignment_id === state.selectedAssignmentId) ||
-      null
-    );
-  }, [assignmentHistory.items, state.todayAssignments, state.selectedAssignmentId]);
-  const submitTitle = submitRow?.title || submitAssignmentId;
-  const submitKind = submitRow ? coerceAssignmentKind(submitRow.assignment_kind) : undefined;
-  const submitAllowPractice = submitRow
-    ? parseAllowPractice(submitRow.allow_practice, coerceAssignmentKind(submitRow.assignment_kind))
-    : false;
-
-  const handleSubmitCompleted = useCallback(() => {
-    dispatch({
-      type: 'SET',
-      field: 'assignmentRefreshNonce',
-      value: state.assignmentRefreshNonce + 1,
-    });
-    void assignmentHistory.reload();
-  }, [assignmentHistory, dispatch, state.assignmentRefreshNonce]);
-
-  const submitPanel = submitAssignmentId ? (
-    <StudentSubmitPanel
-      apiBase={state.apiBase}
-      studentId={state.verifiedStudent?.student_id || ''}
-      assignmentId={submitAssignmentId}
-      assignmentTitle={submitTitle}
-      assignmentKind={submitKind}
-      allowPractice={submitAllowPractice}
-      chatFiles={matchReadyChatFiles(
-        attachments.filter((item) => item.status === 'ready'),
-        chatPickedFiles,
-      )}
-      onClose={() => setSubmitAssignmentId('')}
-      onSubmitted={handleSubmitCompleted}
-    />
-  ) : null;
-
-  const historyPage = (
-    <StudentAssignmentHistoryPage
-      items={assignmentHistory.items}
-      loading={assignmentHistory.loading}
-      error={assignmentHistory.error}
-      apiBase={state.apiBase}
-      studentId={state.verifiedStudent?.student_id || ''}
-      onBack={() => setAssignmentHistoryOpen(false)}
-      onSubmit={handleOpenSubmit}
-      onOpenAssignment={handleOpenAssignment}
-    />
-  );
-
-  const todayHomeContent = (
-    <StudentTodayHome
-      dateLabel={heroDateLabel}
-      viewModel={todayHomeViewModel}
-      onPrimaryAction={handlePrimaryHomeAction}
-      onOpenAssignment={handleOpenAssignment}
-      onOpenHistory={handleOpenHistory}
-      onOpenFreeChat={handleOpenFreeChat}
-      onOpenAssignmentHistory={handleOpenAssignmentHistory}
-      onOpenSubmit={handleOpenSubmit}
-    />
-  );
-
-  const learningContent = (
-    <Suspense fallback={pageFallback}>
-      {submitPanel || (assignmentHistoryOpen ? historyPage : todayHomeContent)}
-    </Suspense>
-  );
-
-  const chatContent = (
-    <Suspense fallback={pageFallback}>
-      <ChatPanel
-        assignmentKind={selectedRow ? coerceAssignmentKind(selectedRow.assignment_kind) : undefined}
-        renderedMessages={renderedMessages}
-        sending={state.sending}
-        pendingChatJobId={state.pendingChatJob?.job_id || ''}
-        verifiedStudent={state.verifiedStudent}
-        messagesRef={messagesRef}
-        endRef={endRef}
-        isNearBottom={isNearBottom}
-        scrollToBottom={scrollToBottom}
-        inputRef={inputRef}
-        input={state.input}
-        setInput={setInput}
-        handleInputKeyDown={handleInputKeyDown}
-        handleSend={handleSend}
-        composerHint={composerHint}
-        attachments={attachments}
-        uploadingAttachments={uploadingAttachments}
-        hasSendableAttachments={hasSendableAttachments}
-        onPickFiles={handlePickFiles}
-        onRemoveAttachment={handleRemoveAttachment}
-        onOpenSubmit={
-          state.selectedAssignmentId
-            ? () => handleOpenSubmit(state.selectedAssignmentId)
-            : undefined
-        }
-      />
-    </Suspense>
-  );
-
-  const mobileLearningContent =
-    state.verifyOpen || !state.verifiedStudent ? (
-      <main
-        className="student-mobile-stage student-mobile-learning-stage"
-        data-testid="student-learning-overview-panel"
-      >
-        <div className="student-mobile-pane">
-          <SessionSidebarLearningSection
-            apiBase={state.apiBase}
-            dispatch={dispatch}
-            verifiedStudent={state.verifiedStudent}
-            verifyOpen={state.verifyOpen}
-            handleVerify={handleVerify}
-            nameInput={state.nameInput}
-            classInput={state.classInput}
-            credentialInput={state.credentialInput}
-            verifying={state.verifying}
-            verifyError={state.verifyError}
-            verifyInfo={state.verifyInfo}
-            todayAssignment={state.todayAssignment}
-            todayAssignments={state.todayAssignments}
-            assignmentLoading={state.assignmentLoading}
-            assignmentError={state.assignmentError}
-            resetVerification={sessionManager.resetVerification}
-          />
-        </div>
-      </main>
-    ) : (
-      learningContent
-    );
-
-  const mobileSessionsContent = (
-    <main
-      className="student-mobile-stage student-mobile-sessions-stage"
-      data-testid="student-session-list-panel"
-    >
-      <SessionSidebarHistorySection
-        dispatch={dispatch}
-        verifiedStudent={state.verifiedStudent}
-        historyLoading={state.historyLoading}
-        historyError={state.historyError}
-        historyHasMore={state.historyHasMore}
-        refreshSessions={sessionManager.refreshSessions}
-        showArchivedSessions={state.showArchivedSessions}
-        historyQuery={state.historyQuery}
-        visibleSessionCount={sessionManager.visibleSessions.length}
-        groupedSessions={sessionManager.groupedSessions}
-        deletedSessionIds={state.deletedSessionIds}
-        activeSessionId={state.activeSessionId}
-        onSelectSession={(sessionId) => {
-          setHomeOpen(false);
-          setMobileSessionListOpen(false);
-          setMobileTab('chat');
-          void sessionManager.selectStudentSession(sessionId);
-        }}
-        getSessionTitle={sessionManager.getSessionTitle}
-        openSessionMenuId={state.openSessionMenuId}
-        toggleSessionMenu={toggleSessionMenu}
-        handleSessionMenuTriggerKeyDown={handleSessionMenuTriggerKeyDown}
-        handleSessionMenuKeyDown={handleSessionMenuKeyDown}
-        setSessionMenuTriggerRef={setSessionMenuTriggerRef}
-        setSessionMenuRef={setSessionMenuRef}
-        renameSession={sessionManager.renameSession}
-        toggleSessionArchive={sessionManager.toggleSessionArchive}
-        sessionHasMore={state.sessionHasMore}
-        sessionLoading={state.sessionLoading}
-        sessionCursor={state.sessionCursor}
-        loadSessionMessages={sessionManager.loadSessionMessages}
-        sessionError={state.sessionError}
-        startNewStudentSession={handleStartNewStudentSession}
-      />
-    </main>
-  );
-
-  // ── Render ──
-  return (
-    <div
-      className={`app flex h-dvh flex-col bg-bg overflow-hidden ${studentUseMobileShellV2 ? 'student-mobile-shell-v2' : ''}`.trim()}
-      ref={appRef}
-      data-mobile-shell-v2={mobileShellV2Enabled ? '1' : '0'}
-    >
-      <a
-        href="#student-main"
-        className="absolute left-[-999px] top-2 z-[1000] bg-surface text-ink px-3 py-2 rounded-md focus:left-2"
-      >
-        跳到主内容
-      </a>
-      <StudentTopbar
+      <StudentMobileShell
+        appRef={appRef}
+        mobileShellV2Enabled={nav.mobileShellV2Enabled}
         verifiedStudent={state.verifiedStudent}
         sidebarOpen={state.sidebarOpen}
-        homeActive={homeOpen}
-        compactMobile={studentUseMobileShellV2}
+        homeOpen={nav.homeOpen}
         dispatch={dispatch}
-        openTodayHome={openTodayHome}
-        startNewStudentSession={handleStartNewStudentSession}
+        openTodayHome={nav.openTodayHome}
+        startNewStudentSession={nav.handleStartNewStudentSession}
+        mobileTab={nav.mobileTab}
+        onMobileTabChange={nav.handleMobileTabChange}
+        mobileLearningContent={content.mobileLearningContent}
+        mobileSessionsContent={content.mobileSessionsContent}
+        chatContent={content.chatContent}
+        sessionDialogs={content.sessionDialogs}
       />
-      {studentUseMobileShellV2 ? (
-        <div className="student-mobile-shell-main">
-          {mobileTab === 'learning'
-            ? mobileLearningContent
-            : mobileTab === 'sessions'
-              ? mobileSessionsContent
-              : chatContent}
-          <SessionSidebarDialogs
-            renameDialogSessionId={state.renameDialogSessionId}
-            archiveDialogSessionId={state.archiveDialogSessionId}
-            getSessionTitle={sessionManager.getSessionTitle}
-            archiveDialogActionLabel={sessionManager.archiveDialogActionLabel}
-            archiveDialogIsArchived={sessionManager.archiveDialogIsArchived}
-            cancelRenameDialog={sessionManager.cancelRenameDialog}
-            confirmRenameDialog={sessionManager.confirmRenameDialog}
-            cancelArchiveDialog={sessionManager.cancelArchiveDialog}
-            confirmArchiveDialog={sessionManager.confirmArchiveDialog}
-          />
-        </div>
-      ) : (
-        <StudentLayout
-          sidebarOpen={state.sidebarOpen}
-          sidebar={sessionSidebarContent}
-          chat={
-            homeOpen || assignmentHistoryOpen || Boolean(submitAssignmentId)
-              ? learningContent
-              : chatContent
-          }
-        />
-      )}
-      {studentUseMobileShellV2 ? (
-        <MobileTabBar
-          items={mobileTabItems}
-          activeId={mobileTab}
-          onChange={handleMobileTabChange}
-          ariaLabel="学生端移动导航"
-        />
-      ) : null}
-    </div>
+    );
+  }
+
+  return (
+    <StudentDesktopShell
+      appRef={appRef}
+      mobileShellV2Enabled={nav.mobileShellV2Enabled}
+      verifiedStudent={state.verifiedStudent}
+      sidebarOpen={state.sidebarOpen}
+      homeOpen={nav.homeOpen}
+      assignmentHistoryOpen={nav.assignmentHistoryOpen}
+      submitAssignmentId={nav.submitAssignmentId}
+      dispatch={dispatch}
+      openTodayHome={nav.openTodayHome}
+      startNewStudentSession={nav.handleStartNewStudentSession}
+      sidebar={content.sessionSidebarContent}
+      learningContent={content.learningContent}
+      chatContent={content.chatContent}
+    />
   );
 }
