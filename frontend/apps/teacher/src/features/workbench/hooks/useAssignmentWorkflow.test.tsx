@@ -329,6 +329,63 @@ describe('useAssignmentWorkflow folder draft locator', () => {
     expect(confirm?.body.job_id).toBeUndefined();
   });
 
+  it('folderDraft confirm sends only assignment_id when leftover job_id is also present', async () => {
+    window.localStorage.setItem(
+      'teacherActiveUpload',
+      JSON.stringify({ type: 'assignment', job_id: 'job-leftover' }),
+    );
+    const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        calls.push({ url: String(url), body });
+        return {
+          ok: true,
+          json: async () => ({ ok: true, message: 'ok', assignment_id: 'HW-FOLDER' }),
+          text: async () => '',
+        };
+      }),
+    );
+
+    const setDraftActionStatus = vi.fn();
+    const { result } = renderHook(() =>
+      useAssignmentWorkflow({
+        ...baseParams,
+        uploadJobId: 'job-leftover',
+        uploadJobInfo: null,
+        uploadDraft: folderDraft,
+        setUploadError: vi.fn(),
+        setDraftActionError: vi.fn(),
+        setDraftActionStatus,
+        setDraftSaving: vi.fn(),
+        setUploadConfirming: vi.fn(),
+        setUploadStatus: vi.fn(),
+        setUploadDraft: vi.fn(),
+        setMisconceptionsDirty: vi.fn(),
+        setProgressAssignmentId: vi.fn(),
+        setProgressPanelCollapsed: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleConfirmUpload();
+    });
+    expect(setDraftActionStatus).toHaveBeenCalledWith('正在发布草稿…');
+    const confirm = calls.find((call) => call.url.includes('/assignment/upload/confirm'));
+    expect(confirm).toBeTruthy();
+    expect(confirm?.body).toEqual({
+      assignment_id: 'HW-FOLDER',
+      strict_requirements: true,
+      completion_policy_override: {
+        requires_submission: true,
+        requires_discussion: false,
+        allow_practice: true,
+      },
+    });
+    expect(confirm?.body).not.toHaveProperty('job_id');
+  });
+
   it('confirm override uses draft.assignment_kind not picker kind', async () => {
     window.localStorage.removeItem('teacherActiveUpload');
     const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
