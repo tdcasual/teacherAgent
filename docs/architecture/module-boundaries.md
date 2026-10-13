@@ -59,11 +59,15 @@
 ## Frontend Boundaries (Student App)
 
 - 应用编排入口：`frontend/apps/student/src/App.tsx`
+- 导航：`frontend/apps/student/src/hooks/useStudentNavigation.ts`
+- 桌面壳：`frontend/apps/student/src/features/layout/StudentDesktopShell.tsx`
+- 移动壳：`frontend/apps/student/src/features/layout/StudentMobileShell.tsx`
 - 聊天主面板：`frontend/apps/student/src/features/chat/ChatPanel.tsx`
 - 会话编排与分组：`frontend/apps/student/src/hooks/useSessionManager.ts`
 - 侧边栏容器：`frontend/apps/student/src/features/chat/SessionSidebar.tsx`
 - 约束：
   - `App.tsx` 只做跨模块状态编排；聊天、会话、认证逻辑必须继续下沉到 `features/*` 或 `hooks/*`
+  - 桌面/移动可见树由 `StudentDesktopShell` / `StudentMobileShell` 组合；四条 `lazy()` 页面块留在 `App.tsx`
   - 新 UI 区块优先进入 `features/*`，避免将复杂视图回流到 `App.tsx`
   - 会话分组/筛选规则优先放在 selector 或 hook 层，不在页面层重复实现
   - E2E 稳定定位器必须使用 `data-testid`
@@ -71,14 +75,17 @@
 ## Frontend Boundaries (Teacher App)
 
 - 应用编排入口：`frontend/apps/teacher/src/App.tsx`
+- 应用控制器：`frontend/apps/teacher/src/useTeacherAppController.ts`（与 App 同层；**禁止**放进 `features/layout/`。layout 不拥有 controller）
 - 应用壳层：`frontend/apps/teacher/src/features/layout/TeacherAppLayout.tsx`
 - 顶栏与移动壳：`frontend/apps/teacher/src/features/layout/TeacherTopbar.tsx`、`frontend/apps/teacher/src/features/layout/useTeacherMobileShell.ts`
+- 认证面板：`frontend/apps/teacher/src/features/auth/TeacherAuthPanel.tsx`（`writeTeacherAuthSession` 的唯一 UI 调用点）
 - 聊天主面板：`frontend/apps/teacher/src/features/chat/TeacherChatMainContent.tsx`
 - 会话列表：`frontend/apps/teacher/src/features/chat/SessionSidebar.tsx`、`frontend/apps/teacher/src/features/chat/TeacherSessionRail.tsx`
 - 工作台：`frontend/apps/teacher/src/features/workbench/TeacherWorkbench.tsx`
 - 待发送 job：`frontend/apps/teacher/src/features/chat/useTeacherPendingChatJob.ts`（必须复用 `frontend/apps/shared/pendingChatJob.ts`，禁止再实现一份 parser）
 - 约束：
   - `App.tsx` 只做跨模块状态编排与 hook 装配；壳层 JSX 留在 `TeacherAppLayout`，不得把 `.teacher-layout` / 移动 tab / 会话 sheet 回流到 `App.tsx`
+  - `useTeacherAppController` 组装 layout props 与 workflow/chat/session；`features/layout` 不得拥有或反向依赖该 controller
   - 新 UI 区块优先进入 `features/*`，避免将复杂视图回流到 `App.tsx`
   - 布局/顶栏/移动 tab 不承载 chat send、assignment upload/confirm/progress 业务编排
   - `TeacherAppLayout` 可以组合 chat / workbench 表面；`features/chat` 与 `features/workbench` 不得反向依赖 `TeacherAppLayout` 或 `App.tsx`

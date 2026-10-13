@@ -22,6 +22,8 @@
 
 `pytest tests/ -x`：一次只暴露一个失败。覆盖率 `--cov-fail-under=85`。frontend `format:check` 扫 `apps/**/*.{ts,tsx,css}`。prettier printWidth 100 会增加物理行数，不要用涨预算代替抽取。
 
+作业工作流 hook 以 `useAssignmentWorkflow` facade 为入口；禁止涨 hotspot 行数上限。
+
 ## 回滚
 
 读路径 SQL-primary 失败：revert catalog/progress 提交。不要 `git filter-repo`。

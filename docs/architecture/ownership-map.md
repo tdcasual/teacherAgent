@@ -13,9 +13,12 @@
 | `packs/subjects/*` `services/api/subject_pack_service.py` | Assignment Domain | Platform/API | 学科 pack 装载；未知 id 回退 generic，永不回退物理 |
 | `POST /auth/admin/assignments/{id}/claim` `services/api/assignment_meta_ownership_migrate_service.py` | Assignment Domain | Auth | 孤儿作业认领（admin only） |
 | `frontend/apps/student/src/App.tsx` `frontend/apps/student/src/features/session/*` | Student Frontend | Platform/API | 会话壳层结构、跨模块状态 |
+| `frontend/apps/student/src/hooks/useStudentNavigation.ts` `frontend/apps/student/src/features/layout/StudentDesktopShell.tsx` `frontend/apps/student/src/features/layout/StudentMobileShell.tsx` | Student Frontend | Platform/API | 学生桌面/移动壳与导航 |
 | `frontend/apps/student/src/features/chat/*` | Student Frontend | Chat Domain | 聊天渲染、发送/恢复交互 |
 | `frontend/apps/student/src/features/workbench/*` | Student Frontend | Assignment Domain | 学习信息、侧栏信息架构 |
-| `frontend/apps/teacher/src/App.tsx` `frontend/apps/teacher/src/features/layout/*` | Teacher Frontend | Platform/API | 应用壳层结构、跨模块状态 |
+| `frontend/apps/teacher/src/App.tsx` `frontend/apps/teacher/src/useTeacherAppController.ts` | Teacher Frontend | Platform/API | 应用编排与控制器（layout **不得**拥有 controller） |
+| `frontend/apps/teacher/src/features/layout/*` | Teacher Frontend | Platform/API | 应用壳层结构（顶栏/移动 tab；不承载 workflow/chat send） |
+| `frontend/apps/teacher/src/features/auth/TeacherAuthPanel.tsx` | Teacher Frontend | Auth | 教师认证面（login / set-password persist） |
 | `frontend/apps/teacher/src/features/chat/*` | Teacher Frontend | Chat Domain | 聊天渲染、发送/恢复交互 |
 | `frontend/apps/teacher/src/features/workbench/*` | Teacher Frontend | Assignment Domain | 工作台、作业工作流（upload → confirm → progress） |
 | `frontend/apps/teacher/src/features/settings/*` | Teacher Frontend | Platform/API | 模型与连接设置 |
@@ -26,7 +29,7 @@
 
 1. 修改 `runtime` 或 `workers` 时，必须至少有 Runtime 角色评审。
 2. 修改 `routes/*` 同时变更业务逻辑时，必须有对应 Domain 角色评审。
-3. 修改 `App.tsx` 且新增 UI 区块时，必须确认是否可下沉至 `features/*`。教师端壳层改动应落在 `TeacherAppLayout`，而不是把 JSX 加回 `App.tsx`。
+3. 修改 `App.tsx` 且新增 UI 区块时，必须确认是否可下沉至 `features/*`。教师端壳层改动应落在 `TeacherAppLayout`，而不是把 JSX 加回 `App.tsx`。跨模块状态改动应落在 `useTeacherAppController`（`frontend/apps/teacher/src/useTeacherAppController.ts`），禁止把 controller 放进 `features/layout/`。
 4. 变更 bundling 配置时，必须附带预算测试或构建产物对比证据。
 
 ## Escalation Guide
