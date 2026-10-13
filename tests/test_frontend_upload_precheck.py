@@ -24,7 +24,7 @@ def test_chat_attachments_use_precheck_for_suffix_and_single_file_size() -> None
 
 
 def test_assignment_workflow_uses_client_side_upload_precheck() -> None:
-    source = _read("frontend/apps/teacher/src/features/workbench/hooks/useAssignmentWorkflow.ts")
+    source = _read("frontend/apps/teacher/src/features/workbench/hooks/useUploadAssignment.ts")
     assert "ASSIGNMENT_UPLOAD_MAX_FILES_PER_FIELD" in source
     assert "ASSIGNMENT_UPLOAD_MAX_TOTAL_BYTES" in source
     assert "validateFilesBeforeUpload(uploadFiles" in source
