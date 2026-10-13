@@ -1,38 +1,26 @@
 import { useCallback } from 'react';
+import { computeLocalRequirementsMissing, parseLineList } from '../workbenchUtils';
+import { toUserFacingErrorMessage } from '../../../../../shared/errorMessage';
 import type { UploadDraft } from '../../../appTypes';
+import type { UseAssignmentWorkflowParams } from '../../../types/workflow';
 
-type UseDraftMutationsParams = {
-  uploadDraft: UploadDraft | null;
-  setUploadDraft: React.Dispatch<React.SetStateAction<UploadDraft | null>>;
+const toErrorMessage = (error: unknown, fallback = '请求失败') => {
+  return toUserFacingErrorMessage(error, fallback);
 };
 
-type UnknownRecord = Record<string, unknown>;
-
-export function useDraftMutations({ setUploadDraft }: UseDraftMutationsParams) {
-  const computeLocalRequirementsMissing = useCallback((req: UnknownRecord): string[] => {
-    const missing: string[] = [];
-    const subject = String(req?.subject || '').trim();
-    const topic = String(req?.topic || '').trim();
-    const grade = String(req?.grade_level || '').trim();
-    const classLevel = String(req?.class_level || '').trim();
-    const core = Array.isArray(req?.core_concepts) ? req.core_concepts : [];
-    const typical = String(req?.typical_problem || '').trim();
-    const misconceptions = Array.isArray(req?.misconceptions) ? req.misconceptions : [];
-    const duration = Number(req?.duration_minutes || 0);
-    const prefs = Array.isArray(req?.preferences) ? req.preferences : [];
-
-    if (!subject) missing.push('subject');
-    if (!topic) missing.push('topic');
-    if (!grade) missing.push('grade_level');
-    if (!['偏弱', '中等', '较强', '混合'].includes(classLevel)) missing.push('class_level');
-    if (core.filter(Boolean).length < 3) missing.push('core_concepts');
-    if (!typical) missing.push('typical_problem');
-    if (misconceptions.filter(Boolean).length < 4) missing.push('misconceptions');
-    if (![20, 40, 60].includes(duration)) missing.push('duration_minutes');
-    if (prefs.filter(Boolean).length < 1) missing.push('preferences');
-
-    return missing;
-  }, []);
+export function useDraftMutations(params: UseAssignmentWorkflowParams) {
+  const {
+    apiBase,
+    assignmentKind,
+    misconceptionsText,
+    setUploadDraft,
+    setUploadError,
+    setUploadStatus,
+    setDraftSaving,
+    setDraftActionStatus,
+    setDraftActionError,
+    setMisconceptionsDirty,
+  } = params;
 
   const updateDraftRequirement = useCallback(
     (key: string, value: unknown) => {
@@ -42,7 +30,10 @@ export function useDraftMutations({ setUploadDraft }: UseDraftMutationsParams) {
           ...(prev.requirements || {}),
           [key]: value,
         };
-        const nextMissing = computeLocalRequirementsMissing(nextRequirements);
+        const nextMissing = computeLocalRequirementsMissing(
+          nextRequirements,
+          prev.assignment_kind || assignmentKind,
+        );
         return {
           ...prev,
           requirements: nextRequirements,
@@ -50,11 +41,11 @@ export function useDraftMutations({ setUploadDraft }: UseDraftMutationsParams) {
         };
       });
     },
-    [setUploadDraft, computeLocalRequirementsMissing],
+    [assignmentKind, setUploadDraft],
   );
 
   const updateDraftQuestion = useCallback(
-    (index: number, patch: UnknownRecord) => {
+    (index: number, patch: Record<string, unknown>) => {
       setUploadDraft((prev) => {
         if (!prev) return prev;
         const next = [...(prev.questions || [])];
@@ -66,9 +57,75 @@ export function useDraftMutations({ setUploadDraft }: UseDraftMutationsParams) {
     [setUploadDraft],
   );
 
+  const saveDraft = useCallback(
+    async (draft: UploadDraft) => {
+      setDraftSaving(true);
+      setUploadError('');
+      setDraftActionError('');
+      setDraftActionStatus('正在保存草稿…');
+      try {
+        const normalizedRequirements = {
+          ...(draft.requirements || {}),
+          misconceptions: parseLineList(misconceptionsText),
+        };
+        const jobId = String(draft.job_id || '').trim();
+        const assignmentId = String(draft.assignment_id || '').trim();
+        const payload: Record<string, unknown> = {
+          requirements: normalizedRequirements,
+          questions: draft.questions,
+        };
+        if (jobId) payload.job_id = jobId;
+        else payload.assignment_id = assignmentId;
+        const res = await fetch(`${apiBase}/assignment/upload/draft/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || `状态码 ${res.status}`);
+        }
+        const data = await res.json();
+        if (data?.requirements_missing) {
+          setUploadDraft((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  requirements_missing: data.requirements_missing,
+                  requirements: normalizedRequirements,
+                  draft_saved: true,
+                }
+              : prev,
+          );
+        }
+        const msg = data?.message || '草稿已保存。';
+        setDraftActionStatus(msg);
+        setUploadStatus((prev) => `${prev ? prev + '\n\n' : ''}${msg}`);
+        setMisconceptionsDirty(false);
+      } catch (err: unknown) {
+        const message = toErrorMessage(err);
+        setDraftActionError(message);
+        throw err;
+      } finally {
+        setDraftSaving(false);
+      }
+    },
+    [
+      apiBase,
+      misconceptionsText,
+      setDraftActionError,
+      setDraftActionStatus,
+      setDraftSaving,
+      setMisconceptionsDirty,
+      setUploadDraft,
+      setUploadError,
+      setUploadStatus,
+    ],
+  );
+
   return {
-    computeLocalRequirementsMissing,
     updateDraftRequirement,
     updateDraftQuestion,
+    saveDraft,
   };
 }

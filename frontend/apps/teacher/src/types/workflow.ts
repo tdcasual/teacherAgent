@@ -195,3 +195,127 @@ export type WorkflowSummaryCardProps = {
   formatUploadJobSummary: FormatUploadJobSummary;
   formatProgressSummary: FormatProgressSummary;
 };
+
+// ── Assignment workflow hook ───────────────────────────────────────────
+
+export type UseAssignmentWorkflowParams = {
+  apiBase: string;
+
+  assignmentKind: AssignmentKind;
+  contentSource: ContentSource;
+  completionRequiresSubmission: boolean;
+  completionRequiresDiscussion: boolean;
+  completionAllowPractice: boolean;
+  setAssignmentKind: (value: AssignmentKind) => void;
+  setContentSource: (value: ContentSource) => void;
+  setCompletionRequiresSubmission: (value: boolean) => void;
+  setCompletionRequiresDiscussion: (value: boolean) => void;
+  setCompletionAllowPractice: (value: boolean) => void;
+
+  // Upload card state
+  uploadMode: string;
+  uploadAssignmentId: string;
+  uploadDate: string;
+  uploadDueAt: string;
+  uploadSubjectId: string;
+  uploadScope: string;
+  uploadClassName: string;
+  uploadStudentIds: string;
+  uploadFiles: File[];
+  uploadAnswerFiles: File[];
+  uploading: boolean;
+  uploadStatus: string;
+  uploadError: string;
+  uploadCardCollapsed: boolean;
+  uploadJobId: string;
+  uploadJobInfo: UploadJobStatus | null;
+  uploadConfirming: boolean;
+  uploadStatusPollNonce: number;
+  uploadDraft: UploadDraft | null;
+  draftPanelCollapsed: boolean;
+  draftLoading: boolean;
+  draftError: string;
+  questionShowCount: number;
+  draftSaving: boolean;
+  draftActionStatus: string;
+  draftActionError: string;
+  misconceptionsText: string;
+  misconceptionsDirty: boolean;
+
+  // Progress state
+  progressPanelCollapsed: boolean;
+  progressAssignmentId: string;
+  progressLoading: boolean;
+  progressError: string;
+  progressData: AssignmentProgress | null;
+  progressOnlyIncomplete: boolean;
+
+  // Setters
+  setUploadError: (value: string) => void;
+  setUploadStatus: (value: string | ((prev: string) => string)) => void;
+  setUploadJobId: (value: string) => void;
+  setUploadJobInfo: (
+    value: UploadJobStatus | null | ((prev: UploadJobStatus | null) => UploadJobStatus | null),
+  ) => void;
+  setUploadDraft: (
+    value: UploadDraft | null | ((prev: UploadDraft | null) => UploadDraft | null),
+  ) => void;
+  setUploadFiles: (value: File[]) => void;
+  setUploadAnswerFiles: (value: File[]) => void;
+  setUploading: (value: boolean) => void;
+  setUploadCardCollapsed: (value: boolean | ((prev: boolean) => boolean)) => void;
+  setUploadConfirming: (value: boolean) => void;
+  setUploadStatusPollNonce: (value: number | ((prev: number) => number)) => void;
+  setDraftPanelCollapsed: (value: boolean | ((prev: boolean) => boolean)) => void;
+  setDraftLoading: (value: boolean) => void;
+  setDraftError: (value: string) => void;
+  setQuestionShowCount: (value: number | ((prev: number) => number)) => void;
+  setDraftSaving: (value: boolean) => void;
+  setDraftActionStatus: (value: string) => void;
+  setDraftActionError: (value: string) => void;
+  setMisconceptionsText: (value: string) => void;
+  setMisconceptionsDirty: (value: boolean) => void;
+  setProgressPanelCollapsed: (value: boolean | ((prev: boolean) => boolean)) => void;
+  setProgressAssignmentId: (value: string) => void;
+  setProgressLoading: (value: boolean) => void;
+  setProgressError: (value: string) => void;
+  setProgressData: (value: AssignmentProgress | null) => void;
+};
+
+export type UseAssignmentWorkflowReturn = {
+  handleUploadAssignment: (event: FormEvent) => Promise<void>;
+  handleFromBank: (input: { kp: string; count: number }) => Promise<void>;
+  handleGenerate: (input: {
+    kp: string;
+    perKp: number;
+    topic: string;
+    gradeLevel: string;
+    seed: string;
+  }) => Promise<void>;
+  requestAssignmentKindChange: (kind: AssignmentKind) => void;
+  requestContentSourceChange: (source: ContentSource) => void;
+  pendingPickerChange: PendingPickerChange;
+  confirmPendingPickerChange: () => void;
+  cancelPendingPickerChange: () => void;
+  saveDraft: (draft: UploadDraft) => Promise<void>;
+  handleConfirmUpload: () => Promise<void>;
+  fetchAssignmentProgress: (assignmentId?: string) => Promise<void>;
+  archiveAssignment: (assignmentId?: string) => Promise<void>;
+  unarchiveAssignment: (assignmentId?: string) => Promise<void>;
+  saveStudentGrade: (
+    studentId: string,
+    payload: {
+      override_score?: number | null;
+      comment?: string;
+      adopted_coach_excerpts?: Array<{ text: string }>;
+      adopt_rubric_suggestion?: boolean;
+      rubric_checks?: Array<{ id?: string; pass?: boolean; note?: string }>;
+    },
+  ) => Promise<void>;
+  refreshWorkflowWorkbench: () => void;
+  scrollToWorkflowSection: (sectionId: string) => void;
+  assignmentWorkflowIndicator: WorkflowIndicator;
+  assignmentWorkflowAutoState: string;
+  updateDraftRequirement: (key: string, value: unknown) => void;
+  updateDraftQuestion: (index: number, patch: Record<string, unknown>) => void;
+};

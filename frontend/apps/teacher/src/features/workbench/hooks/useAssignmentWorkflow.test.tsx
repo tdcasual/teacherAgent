@@ -611,3 +611,40 @@ describe('useAssignmentWorkflow saveStudentGrade', () => {
     expect(String(gradeCall?.[0])).not.toContain('HW-TYPED');
   });
 });
+
+describe('useAssignmentWorkflow draft requirements', () => {
+  it('non-problem_set brief update does not mark typical_problem missing', () => {
+    let draft: Record<string, unknown> | null = {
+      assignment_id: 'HW-SCENARIO',
+      date: '2026-10-10',
+      scope: 'public',
+      assignment_kind: 'scenario',
+      questions: [],
+      requirements: { subject: '物理', topic: '测量', grade_level: '高二' },
+      requirements_missing: ['brief'],
+    };
+
+    const { result } = renderHook(() =>
+      useAssignmentWorkflow({
+        ...baseParams,
+        assignmentKind: 'scenario',
+        uploadDraft: draft as never,
+        setUploadDraft: (value) => {
+          draft =
+            typeof value === 'function'
+              ? (value as (prev: typeof draft) => typeof draft)(draft)
+              : (value as Record<string, unknown>);
+        },
+      }),
+    );
+
+    act(() => {
+      result.current.updateDraftRequirement('brief', '考查说明');
+    });
+
+    const missing = (draft?.requirements_missing as string[] | undefined) || [];
+    expect(missing).not.toContain('typical_problem');
+    expect(missing).not.toContain('brief');
+    expect((draft?.requirements as { brief?: string } | undefined)?.brief).toBe('考查说明');
+  });
+});
