@@ -1,15 +1,16 @@
-import type { Dispatch, FormEvent, SetStateAction } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import type { AssignmentProgress, AssignmentProgressStudent } from '../../../appTypes';
 import type { FormatProgressSummary } from '../../../types/workflow';
 import LabeledField from './LabeledField';
+import ProgressExamNotes from './ProgressExamNotes';
+import ProgressGradeForm, { type TeacherGradePayload } from './ProgressGradeForm';
+import ProgressPortraitSnippet from './ProgressPortraitSnippet';
+import ProgressRubricBlock, {
+  canAdoptRubric,
+  ProgressAdoptRubricButton,
+} from './ProgressRubricBlock';
 
-export type TeacherGradePayload = {
-  override_score?: number | null;
-  comment?: string;
-  adopted_coach_excerpts?: Array<{ text: string }>;
-  adopt_rubric_suggestion?: boolean;
-  rubric_checks?: Array<{ id?: string; pass?: boolean; note?: string }>;
-};
+export type { TeacherGradePayload };
 
 type AssignmentProgressSectionProps = {
   progressPanelCollapsed: boolean;
@@ -54,105 +55,6 @@ const practiceColumnLabel = (student: AssignmentProgressStudent, applicable: boo
   const submitted = Number(student.practice?.submitted || 0);
   const bankMiss = Boolean(student.practice?.bank_miss);
   return `已布置${assigned} · 已交${submitted}${bankMiss ? ' · 题库不足' : ''}`;
-};
-
-const parseAdoptedExcerpts = (raw: string): Array<{ text: string }> => {
-  return raw
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((text) => ({ text }));
-};
-
-const mergeAdoptedExcerpts = (
-  existing: Array<{ text?: string }> | undefined,
-  nextText: string,
-): Array<{ text: string }> => {
-  const merged = (existing || [])
-    .map((item) => ({ text: String(item?.text || '').trim() }))
-    .filter((item) => item.text);
-  const text = nextText.trim();
-  if (text && !merged.some((item) => item.text === text)) merged.push({ text });
-  return merged;
-};
-
-const portraitLabel = (student: AssignmentProgressStudent): string => {
-  const weak = (student.portrait?.recent_weak_kp || []).map((item) => String(item || '').trim()).filter(Boolean);
-  const next = String(student.portrait?.next_focus || '').trim();
-  const source = String(student.portrait?.last_source || '').trim();
-  return `薄弱：${weak.length ? weak.join('、') : '暂无'} · 下一步：${next || '暂无'} · 最近：${source || '暂无'}`;
-};
-
-const canAdoptRubric = (student: AssignmentProgressStudent): boolean => {
-  const suggestion = student.rubric_suggestion;
-  if (suggestion?.status !== 'ready' || suggestion?.suggested_score == null) return false;
-  return Number.isFinite(Number(suggestion.suggested_score));
-};
-
-const examNotesBody = (
-  student: AssignmentProgressStudent,
-  saveStudentGrade?: (studentId: string, payload: TeacherGradePayload) => Promise<void>,
-) => {
-  const archive = student.process_archive;
-  const status = String(student.process_archive_status || archive?.status || 'none');
-  if (!archive || status === 'none') return '无陪练纪要';
-  if (status === 'pending') return '生成中';
-  return (
-    <div className="grid gap-1">
-      {(archive.quotes || []).map((quote, index) => (
-        <div key={`q-${index}`}>
-          {quote.speaker === 'coach' ? '陪练' : '学生'}：{quote.text}
-        </div>
-      ))}
-      {(archive.coach_comment_excerpts || []).map((excerpt, index) => {
-        const text = String(excerpt.text || '').trim();
-        if (!text) return null;
-        return (
-          <div key={`e-${index}`} className="flex flex-wrap items-start gap-2">
-            <span>摘录：{text}</span>
-            {saveStudentGrade ? (
-              <button
-                type="button"
-                className="border border-border rounded-xl py-[4px] px-[8px] bg-white text-ink cursor-pointer"
-                onClick={() =>
-                  void saveStudentGrade(student.student_id, {
-                    adopted_coach_excerpts: mergeAdoptedExcerpts(
-                      student.teacher_grade?.adopted_coach_excerpts,
-                      text,
-                    ),
-                  })
-                }
-              >
-                采纳为评语
-              </button>
-            ) : null}
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-
-const submitStudentGrade = (
-  event: FormEvent<HTMLFormElement>,
-  studentId: string,
-  saveStudentGrade?: (studentId: string, payload: TeacherGradePayload) => Promise<void>,
-) => {
-  event.preventDefault();
-  if (!saveStudentGrade) return;
-  const form = new FormData(event.currentTarget);
-  const scoreRaw = String(form.get('override_score') || '').trim();
-  const comment = String(form.get('comment') || '');
-  const excerptsRaw = String(form.get('adopted_coach_excerpts') || '');
-  const payload: TeacherGradePayload = {
-    comment,
-    adopted_coach_excerpts: parseAdoptedExcerpts(excerptsRaw),
-  };
-  if (scoreRaw) {
-    const score = Number(scoreRaw);
-    if (Number.isFinite(score)) payload.override_score = score;
-  }
-  void saveStudentGrade(studentId, payload);
 };
 
 export default function AssignmentProgressSection(props: AssignmentProgressSectionProps) {
@@ -275,20 +177,7 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
                 <span>过程</span>
                 <span>补练</span>
               </div>
-              {showRubric ? (
-                <div data-testid="progress-assignment-rubric" className="mt-1">
-                  {progressData?.rubric?.source === 'rubric.md' &&
-                  (progressData.rubric.items || []).length > 0 ? (
-                    <ul className="m-0 pl-4">
-                      {(progressData.rubric.items || []).map((item) => (
-                        <li key={item.id || item.text}>{item.text}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <div>无量规，请老师覆盖</div>
-                  )}
-                </div>
-              ) : null}
+              {showRubric ? <ProgressRubricBlock rubric={progressData.rubric} /> : null}
             </div>
           )}
 
@@ -343,90 +232,25 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
                       {attempts > 0 && official == null ? (
                         <div className="text-[12px] text-muted mt-1">未自动出分，请老师覆盖</div>
                       ) : null}
-                      <div
-                        className="text-[12px] text-muted mt-1"
-                        data-testid={`progress-portrait-${s.student_id}`}
-                      >
-                        {portraitLabel(s)}
-                      </div>
-                      <details
-                        className="mt-1 text-[12px] text-muted"
-                        data-testid={`progress-exam-notes-${s.student_id}`}
-                      >
-                        <summary>考查纪要</summary>
-                        {examNotesBody(s, saveStudentGrade)}
-                      </details>
+                      <ProgressPortraitSnippet student={s} />
+                      <ProgressExamNotes student={s} saveStudentGrade={saveStudentGrade} />
                       {showRubric && !canAdoptRubric(s) ? (
                         <div className="text-[12px] text-muted mt-1">请按量规目测后手填覆盖</div>
                       ) : null}
                       {saveStudentGrade ? (
-                        <form
-                          className="mt-2 grid gap-1.5"
-                          onSubmit={(event) =>
-                            submitStudentGrade(event, s.student_id, saveStudentGrade)
-                          }
+                        <ProgressGradeForm
+                          student={s}
+                          saveStudentGrade={saveStudentGrade}
+                          progressLoading={progressLoading}
                         >
-                          <LabeledField label="覆盖分数">
-                            <input
-                              name="override_score"
-                              type="number"
-                              step="any"
-                              defaultValue={s.teacher_grade?.override_score_earned ?? ''}
-                            />
-                          </LabeledField>
-                          <LabeledField label="评语">
-                            <textarea
-                              name="comment"
-                              defaultValue={s.teacher_grade?.comment || ''}
-                              rows={2}
-                            />
-                          </LabeledField>
-                          <LabeledField label="采纳陪练摘录">
-                            <textarea
-                              name="adopted_coach_excerpts"
-                              placeholder="每行一条；未采纳的陪练评语不会记入成绩"
-                              defaultValue={(s.teacher_grade?.adopted_coach_excerpts || [])
-                                .map((item) => item.text || '')
-                                .filter(Boolean)
-                                .join('\n')}
-                              rows={2}
-                            />
-                          </LabeledField>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="submit"
-                              className="border border-border rounded-xl py-[8px] px-[12px] bg-white text-ink cursor-pointer disabled:opacity-60"
+                          {showRubric ? (
+                            <ProgressAdoptRubricButton
+                              student={s}
+                              saveStudentGrade={saveStudentGrade}
                               disabled={progressLoading}
-                            >
-                              保存成绩
-                            </button>
-                            <button
-                              type="button"
-                              className="border border-border rounded-xl py-[8px] px-[12px] bg-white text-ink cursor-pointer disabled:opacity-60"
-                              disabled={progressLoading}
-                              onClick={() =>
-                                void saveStudentGrade(s.student_id, { override_score: null })
-                              }
-                            >
-                              恢复自动分
-                            </button>
-                            {showRubric && canAdoptRubric(s) ? (
-                              <button
-                                type="button"
-                                data-testid={`progress-adopt-rubric-${s.student_id}`}
-                                className="border border-border rounded-xl py-[8px] px-[12px] bg-white text-ink cursor-pointer disabled:opacity-60"
-                                disabled={progressLoading}
-                                onClick={() =>
-                                  void saveStudentGrade(s.student_id, {
-                                    adopt_rubric_suggestion: true,
-                                  })
-                                }
-                              >
-                                按量规给分
-                              </button>
-                            ) : null}
-                          </div>
-                        </form>
+                            />
+                          ) : null}
+                        </ProgressGradeForm>
                       ) : null}
                     </div>
                   </div>
