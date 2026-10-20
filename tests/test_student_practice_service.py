@@ -199,6 +199,8 @@ async def test_practice_submit_does_not_count_as_homework_attempt() -> None:
         def _run(args):
             assert "--attempt-dir" in args
             assert "--skip-profile-update" in args
+            assert "--data-dir" in args
+            assert "--app-root" in args
             (practice_dir / "grading_report.json").write_text(
                 json.dumps(
                     {

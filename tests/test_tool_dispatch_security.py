@@ -499,8 +499,8 @@ class AssignmentRenderJailTest(unittest.TestCase):
         )
 
     def test_assignment_render_explicit_out_rejects_app_root_outside_data_dir(self):
-        from services.api.assignment_generate_tool_service import assignment_render
         from services.api import config as config_mod
+        from services.api.assignment_generate_tool_service import assignment_render
 
         with TemporaryDirectory() as td:
             root = Path(td)
@@ -534,6 +534,8 @@ class AssignmentRenderJailTest(unittest.TestCase):
                 self.assertTrue(ok.get("ok"))
                 self.assertEqual(ok.get("pdf"), str(inside.resolve()))
                 self.assertIn("--out", captured["cmd"])
+                self.assertIn("--data-dir", captured["cmd"])
+                self.assertIn("--app-root", captured["cmd"])
             finally:
                 if old_data is None:
                     os.environ.pop("DATA_DIR", None)
@@ -546,8 +548,8 @@ class AssignmentRenderJailTest(unittest.TestCase):
                 config_mod.reset_default_config()
 
     def test_assignment_render_default_path_unchanged(self):
-        from services.api.assignment_generate_tool_service import assignment_render
         from services.api import config as config_mod
+        from services.api.assignment_generate_tool_service import assignment_render
 
         with TemporaryDirectory() as td:
             root = Path(td)
@@ -562,6 +564,8 @@ class AssignmentRenderJailTest(unittest.TestCase):
                 self.assertTrue(out.get("ok"))
                 self.assertEqual(out.get("pdf"), "output/pdf/assignment_HW1.pdf")
                 self.assertNotIn("--out", captured["cmd"] or [])
+                self.assertIn("--data-dir", captured["cmd"])
+                self.assertIn("--app-root", captured["cmd"])
             finally:
                 if old_data is None:
                     os.environ.pop("DATA_DIR", None)

@@ -295,6 +295,8 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("--assignment-id", args)
             self.assertIn("HW_1", args)
             self.assertIn("--skip-profile-update", args)
+            self.assertIn("--data-dir", args)
+            self.assertIn("--app-root", args)
             self.assertNotIn("--attempt-dir", args)
             self.assertNotIn("--auto-assignment", args)
             self.assertTrue(result.get("ok"))

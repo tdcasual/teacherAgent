@@ -694,7 +694,14 @@ async def submit(
             "--assignment-id",
             safe_assignment_id,
             "--skip-profile-update",
+            "--data-dir",
+            str(_data_dir(deps)),
+            "--app-root",
+            str(deps.app_root),
         ]
+        questions_csv = _assignment_folder(deps, safe_assignment_id) / "questions.csv"
+        if questions_csv.is_file():
+            args += ["--assignment-questions", str(questions_csv)]
         out = _run_grade_script(
             deps,
             args,

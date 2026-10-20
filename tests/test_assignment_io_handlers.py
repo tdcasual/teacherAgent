@@ -118,6 +118,8 @@ async def test_render_assignment_runs_script(tmp_path):
 
     assert result == {"ok": True, "output": "done"}
     assert "render_assignment_pdf.py" in calls["args"][1]
+    assert "--data-dir" in calls["args"]
+    assert "--app-root" in calls["args"]
 
 
 @pytest.mark.anyio

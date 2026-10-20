@@ -60,39 +60,48 @@ def test_apply_grade_adapter_malformed_payload_returns_none() -> None:
     assert gs.apply_grade_adapter(_NonIterableStepsAdapter(), question=question, student_text="x") is None
 
 
-def test_evaluate_question_malformed_adapter_uses_objective_match() -> None:
+def test_evaluate_question_malformed_adapter_uses_objective_match(tmp_path: Path) -> None:
     result = gs.evaluate_question(
         question={"question_id": "Q1", "answer_text": "42"},
         block_text="答案：42",
         adapter=_MalformedScoreAdapter(),
         llm_grade=False,
         llm_confidence_threshold=0.6,
+        folder=tmp_path,
+        app_root=tmp_path,
+        data_dir=tmp_path,
     )
     assert result["status"] == "matched"
     assert result["reason"] == "numeric_match"
     assert result["score"] == 1.0
 
 
-def test_evaluate_question_prefers_adapter_over_objective() -> None:
+def test_evaluate_question_prefers_adapter_over_objective(tmp_path: Path) -> None:
     result = gs.evaluate_question(
         question={"question_id": "Q1", "answer_text": "999"},
         block_text="not the expected answer",
         adapter=_Adapter(),
         llm_grade=False,
         llm_confidence_threshold=0.6,
+        folder=tmp_path,
+        app_root=tmp_path,
+        data_dir=tmp_path,
     )
     assert result["reason"] == "pack_adapter"
     assert result["status"] == "matched"
     assert result["score"] == 0.8
 
 
-def test_evaluate_question_without_adapter_uses_objective_match() -> None:
+def test_evaluate_question_without_adapter_uses_objective_match(tmp_path: Path) -> None:
     result = gs.evaluate_question(
         question={"question_id": "Q1", "answer_text": "42"},
         block_text="答案：42",
         adapter=None,
         llm_grade=False,
         llm_confidence_threshold=0.6,
+        folder=tmp_path,
+        app_root=tmp_path,
+        data_dir=tmp_path,
     )
     assert result["status"] == "matched"
     assert result["reason"] == "numeric_match"

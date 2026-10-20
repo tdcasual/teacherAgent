@@ -51,8 +51,21 @@ async def assignment_download(
 
 
 async def render_assignment(assignment_id: str, *, deps: AssignmentIoHandlerDeps) -> Any:
+    from ..config import DATA_DIR
+
     script = deps.app_root / "scripts" / "render_assignment_pdf.py"
-    out = deps.run_script(["python3", str(script), "--assignment-id", assignment_id])
+    out = deps.run_script(
+        [
+            "python3",
+            str(script),
+            "--assignment-id",
+            assignment_id,
+            "--data-dir",
+            str(DATA_DIR),
+            "--app-root",
+            str(deps.app_root),
+        ]
+    )
     return {"ok": True, "output": out}
 
 

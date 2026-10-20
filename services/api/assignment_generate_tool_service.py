@@ -58,11 +58,21 @@ def assignment_generate(args: Dict[str, Any], deps: AssignmentGenerateDeps) -> D
 
 
 def assignment_render(args: Dict[str, Any], deps: AssignmentGenerateDeps) -> Dict[str, Any]:
+    from .config import DATA_DIR
     from .core_utils import _resolve_app_path, _resolve_data_dir_path
 
     script = deps.app_root / "scripts" / "render_assignment_pdf.py"
     assignment_id = str(args.get("assignment_id", ""))
-    cmd = ["python3", str(script), "--assignment-id", assignment_id]
+    cmd = [
+        "python3",
+        str(script),
+        "--assignment-id",
+        assignment_id,
+        "--data-dir",
+        str(DATA_DIR),
+        "--app-root",
+        str(deps.app_root),
+    ]
     if args.get("assignment_questions"):
         p = _resolve_app_path(args.get("assignment_questions"), must_exist=True)
         if not p:

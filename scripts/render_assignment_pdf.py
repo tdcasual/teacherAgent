@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 import argparse
+import os
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from services.api.question_bank_select_service import resolve_readable_stem_ref  # noqa: E402
+
+_MISSING_STEM_TEXT = "[题干缺失] 请补充题干。"
 
 
 def read_assignment_questions(path: Path):
@@ -17,7 +27,32 @@ def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def render_pdf(assignment_id: str, questions: list, out_pdf: Path):
+def stem_text_for_pdf(
+    stem_ref: str,
+    *,
+    folder: Path,
+    app_root: Path,
+    data_dir: Path,
+) -> str:
+    ref = str(stem_ref or "").strip()
+    if not ref:
+        return _MISSING_STEM_TEXT
+    path = resolve_readable_stem_ref(ref, folder=folder, app_root=app_root, data_dir=data_dir)
+    if path is None:
+        return _MISSING_STEM_TEXT
+    text = read_text(path)
+    return text if str(text or "").strip() else _MISSING_STEM_TEXT
+
+
+def render_pdf(
+    assignment_id: str,
+    questions: list,
+    out_pdf: Path,
+    *,
+    folder: Path,
+    app_root: Path,
+    data_dir: Path,
+):
     try:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.units import cm
@@ -46,7 +81,16 @@ def render_pdf(assignment_id: str, questions: list, out_pdf: Path):
             c.setFont("Helvetica-Bold", 12)
         else:
             c.setFont("Helvetica", 11)
-        c.drawString(x, y, text)
+        payload = str(text or "")
+        try:
+            payload.encode("latin-1")
+        except UnicodeEncodeError:
+            payload = payload.encode("ascii", "replace").decode("ascii")
+        try:
+            c.drawString(x, y, payload)
+        except UnicodeEncodeError:
+            payload = payload.encode("ascii", "replace").decode("ascii")
+            c.drawString(x, y, payload)
         y -= line_height
 
     # Header
@@ -57,13 +101,12 @@ def render_pdf(assignment_id: str, questions: list, out_pdf: Path):
     # Questions
     for idx, q in enumerate(questions, start=1):
         stem_ref = q.get("stem_ref")
-        stem_text = read_text(Path(stem_ref)) if stem_ref else ""
+        stem_text = stem_text_for_pdf(
+            str(stem_ref or ""), folder=folder, app_root=app_root, data_dir=data_dir
+        )
         draw_line(f"{idx}. {q.get('question_id')} ({q.get('kp_id')}|{q.get('difficulty')})", bold=True)
-        if stem_text:
-            for line in stem_text.splitlines():
-                draw_line(line)
-        else:
-            draw_line("[题干缺失] 请补充题干。")
+        for line in stem_text.splitlines() or [stem_text]:
+            draw_line(line)
         draw_line("", bold=False)
 
     c.save()
@@ -74,13 +117,32 @@ def main():
     parser.add_argument("--assignment-id", required=True)
     parser.add_argument("--assignment-questions", help="path to assignment questions csv")
     parser.add_argument("--out", help="output pdf path")
+    parser.add_argument("--data-dir", default="")
+    parser.add_argument("--app-root", default="")
     args = parser.parse_args()
 
-    questions_path = Path(args.assignment_questions) if args.assignment_questions else Path("data/assignments") / args.assignment_id / "questions.csv"
+    app_root = Path(args.app_root).resolve() if str(args.app_root or "").strip() else ROOT
+    data_dir = (
+        Path(args.data_dir).resolve()
+        if str(args.data_dir or "").strip()
+        else Path(os.environ.get("DATA_DIR") or (app_root / "data")).resolve()
+    )
+    assignments_root = (data_dir / "assignments").resolve()
+    if args.assignment_questions:
+        questions_path = Path(args.assignment_questions).resolve()
+    else:
+        questions_path = assignments_root / args.assignment_id / "questions.csv"
     questions = read_assignment_questions(questions_path)
 
     out_pdf = Path(args.out) if args.out else Path("output/pdf") / f"assignment_{args.assignment_id}.pdf"
-    render_pdf(args.assignment_id, questions, out_pdf)
+    render_pdf(
+        args.assignment_id,
+        questions,
+        out_pdf,
+        folder=questions_path.parent,
+        app_root=app_root,
+        data_dir=data_dir,
+    )
     print(f"[OK] Wrote PDF: {out_pdf}")
 
 

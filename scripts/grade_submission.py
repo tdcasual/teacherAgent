@@ -285,14 +285,25 @@ def extract_answer_from_ref(path: Path) -> str:
     return text.splitlines()[0].strip() if text.strip() else ""
 
 
-def get_expected_answer(row: dict) -> str:
+def get_expected_answer(
+    row: dict,
+    *,
+    folder: Path,
+    app_root: Path,
+    data_dir: Path,
+) -> str:
     expected = (row.get("answer_text") or "").strip()
     if expected:
         return expected
-    ref = row.get("answer_ref") or ""
-    if ref:
-        return extract_answer_from_ref(Path(ref))
-    return ""
+    ref = str(row.get("answer_ref") or "").strip()
+    if not ref:
+        return ""
+    from services.api.question_bank_select_service import resolve_readable_stem_ref
+
+    path = resolve_readable_stem_ref(ref, folder=folder, app_root=app_root, data_dir=data_dir)
+    if path is None:
+        return ""
+    return extract_answer_from_ref(path)
 
 
 def resolve_assignment_pack_id(assignment_id: str, assignments_root: Path) -> str:
@@ -355,12 +366,18 @@ def evaluate_question(
     adapter,
     llm_grade: bool,
     llm_confidence_threshold: float,
+    folder: Path,
+    app_root: Path,
+    data_dir: Path,
 ) -> Dict[str, Any]:
     adapter_item = apply_grade_adapter(adapter, question=question, student_text=block_text)
     if adapter_item is not None:
         return adapter_item
 
-    expected = get_expected_answer(question)
+    expected = get_expected_answer(
+        question, folder=folder, app_root=app_root, data_dir=data_dir
+    )
+    answer_ref = str(question.get("answer_ref") or "").strip()
     matched = False
     student_answer = ""
     reason = "missing_expected"
@@ -376,6 +393,24 @@ def evaluate_question(
         confidence = 1.0 if matched or reason.startswith("numeric_") or reason.startswith("mcq_") else 0.5
         earned_score = 1.0 if matched else 0.0
     else:
+        if answer_ref:
+            from services.api.question_bank_select_service import resolve_readable_stem_ref
+
+            path = resolve_readable_stem_ref(
+                answer_ref, folder=folder, app_root=app_root, data_dir=data_dir
+            )
+            if path is None:
+                # jail-out: empty expected must not fall through to Path(rubric_ref)
+                return {
+                    "matched": False,
+                    "student_answer": "",
+                    "reason": "missing_expected",
+                    "status": "ungraded",
+                    "score": 0.0,
+                    "confidence": 0.0,
+                    "matched_steps": [],
+                    "missing_steps": [],
+                }
         rubric_ref = question.get("rubric_ref") or question.get("rubric") or ""
         rubric_path = Path(rubric_ref) if rubric_ref else None
         rubric = load_rubric(rubric_path) if rubric_path else None
@@ -620,6 +655,8 @@ def main():
         default="",
         help="existing practice_* directory; never create submission_*",
     )
+    parser.add_argument("--data-dir", default="")
+    parser.add_argument("--app-root", default="")
     args = parser.parse_args()
 
     load_env_from_dotenv(Path('.env'))
@@ -661,9 +698,15 @@ def main():
     assignment_id = require_safe_id(assignment_id, "assignment_id")
 
     # resolve assignment questions path
-    assignments_root = (ROOT / "data" / "assignments").resolve()
+    app_root = Path(args.app_root).resolve() if str(args.app_root or "").strip() else ROOT
+    data_dir = (
+        Path(args.data_dir).resolve()
+        if str(args.data_dir or "").strip()
+        else Path(os.environ.get("DATA_DIR") or (app_root / "data")).resolve()
+    )
+    assignments_root = (data_dir / "assignments").resolve()
     if args.assignment_questions:
-        questions_path = Path(args.assignment_questions).resolve()
+        questions_path = Path(args.assignment_questions).resolve()  # CSV only; pack still uses assignments_root
     else:
         questions_path = resolve_under(assignments_root, assignment_id, "questions.csv")
     if not questions_path.exists():
@@ -700,10 +743,13 @@ def main():
     correct_count = 0
     ungraded_count = 0
     kp_stats = {}
+    folder = questions_path.parent
     for q in questions:
         qid = q.get("question_id")
         kp_id = q.get("kp_id") or "uncategorized"
-        expected = get_expected_answer(q)
+        expected = get_expected_answer(
+            q, folder=folder, app_root=app_root, data_dir=data_dir
+        )
         block_text = question_blocks.get(qid) if qid else None
         if not block_text:
             block_text = ocr_text
@@ -715,6 +761,9 @@ def main():
             adapter=adapter,
             llm_grade=llm_enabled,
             llm_confidence_threshold=args.llm_confidence_threshold,
+            folder=folder,
+            app_root=app_root,
+            data_dir=data_dir,
         )
         matched = bool(graded["matched"])
         student_answer = graded["student_answer"]

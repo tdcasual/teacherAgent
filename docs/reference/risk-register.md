@@ -68,11 +68,11 @@
 ### RISK-STEM-REF-READ-001
 - 风险描述：作业详情与陪练题干读取将 `stem_ref` 解析为绝对路径或 `APP_ROOT` 相对路径，未套用作业目录 / 题库 jail，可读取 jail 外文本。
 - 状态：已关闭
-- 关闭说明：catalog 与 context 读取共用 `resolve_readable_stem_ref`（作业目录 jail 或 `data/question_bank` jail，含 symlink resolve）。jail 外路径不注入 `stem_text`。
-- 回滚：revert 该提交后详情/context 会再次按 APP_ROOT 裸读。
+- 关闭说明：catalog 与 context 读取共用 `resolve_readable_stem_ref`（作业目录 jail 或 `data/question_bank` jail，含 symlink resolve）。jail 外路径不注入 `stem_text`。`grade_submission.py` 与 `render_assignment_pdf.py` 的 `answer_ref` / `stem_ref` 读路径复用同一函数；越狱 `answer_ref` 不进入 expected、该题 ungraded/`missing_expected` 且不加载 `rubric_ref`；越狱 `stem_ref` 不写入 PDF（产品层回退「[题干缺失] 请补充题干。」）。
+- 回滚：revert 该提交后详情/context 会再次按 APP_ROOT 裸读，批改/PDF 脚本会再次裸读 CSV 内嵌 ref。
 - Owner：后端
 - 下次复审日期：2026-12-01
-- 退出条件：jail 外 `stem_ref`（含 symlink）不返回文件内容；作业目录与题库内题干仍可读。
+- 退出条件：jail 外 `stem_ref`（含 symlink）不返回文件内容；作业目录与题库内题干仍可读。jail 外 `answer_ref` 不进入 expected；jail 外 `stem_ref` 不进入 PDF 字节。
 
 ### RISK-AUTH-CHANGE-ME-001
 - 风险描述：example 使用 `change_me` 占位；compose `${:?}` 只拒绝空值；`validate_auth_secret_policy` 接受任意非空 `AUTH_TOKEN_SECRET`，生产可带着众所周知占位符启动。

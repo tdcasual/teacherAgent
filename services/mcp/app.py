@@ -394,7 +394,16 @@ async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default
                 if owner != bound:
                     return _jsonrpc_error(req.id, 403, "forbidden_assignment_owner")
                 script = APP_ROOT / "scripts" / "render_assignment_pdf.py"
-                cmd = ["python3", str(script), "--assignment-id", assignment_id]
+                cmd = [
+                    "python3",
+                    str(script),
+                    "--assignment-id",
+                    assignment_id,
+                    "--data-dir",
+                    str(DATA_DIR),
+                    "--app-root",
+                    str(APP_ROOT),
+                ]
                 assignment_questions = _optional_contained_arg(args, "assignment_questions")
                 if assignment_questions:
                     cmd += ["--assignment-questions", assignment_questions]

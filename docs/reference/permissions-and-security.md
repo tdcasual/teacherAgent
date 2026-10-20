@@ -29,7 +29,7 @@
 - `assignment.render` 显式 `--out` 必须落在 `DATA_DIR` 下；默认 PDF 路径仍为 `output/pdf/assignment_{id}.pdf`。
 - `student.import` 工具恒 `410 gone`。
 - 学生 `GET /assignment/{id}` 只返回题目 allowlist（`question_id` / `kp_id` / `stem_text` 等），不含 `answer_ref`、`stem_ref`、任意答案列，也不含 meta 的 `answer_files` / `expected_students` / `student_ids`。教师详情保持完整字段。
-- 作业题干读取（catalog / context）将 `stem_ref` 限制在该作业目录或 `DATA_DIR/question_bank`（含 symlink resolve）。
+- 作业题干读取（catalog / context / grade_submission / PDF 脚本）将 `stem_ref` / `answer_ref` 限制在该作业目录或 `DATA_DIR/question_bank`（含 symlink resolve）。
 - 生产环境 `AUTH_TOKEN_SECRET` 不得为空或为 `change_me`。
 
 ## 相关文档

@@ -632,6 +632,10 @@ async def submit_practice(
         "--skip-profile-update",
         "--assignment-questions",
         str(practice_dir / "questions.csv"),
+        "--data-dir",
+        str(deps.data_dir),
+        "--app-root",
+        str(deps.app_root),
     ]
     try:
         deps.run_script(args)

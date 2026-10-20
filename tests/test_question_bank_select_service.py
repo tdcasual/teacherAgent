@@ -10,6 +10,7 @@ from services.api.assignment_upload_confirm_service import (
     _finalize_published_from_folder,
 )
 from services.api.auth_service import AuthPrincipal, reset_current_principal, set_current_principal
+from services.api.config import APP_ROOT
 from services.api.question_bank_select_service import pick_practice_items
 
 
@@ -109,6 +110,8 @@ def test_published_assignment_answers_survive_bank_mutation() -> None:
 
         with (folder / "questions.csv").open(encoding="utf-8") as handle:
             row = next(csv.DictReader(handle))
-        expected = get_expected_answer(row)
+        expected = get_expected_answer(
+            row, folder=folder, app_root=APP_ROOT, data_dir=data_dir
+        )
         assert "42" in expected
         assert "mutated" not in expected
