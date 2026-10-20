@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 
 from services.api.chat_job_processing_service import (
     ComputeChatReplyDeps,
+    _extra_system_protected_prefix,
     _student_can_attach_assignment,
     _student_extra_system,
     compute_chat_reply_sync,
@@ -337,6 +338,65 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
             self.assertIn("【考查清单】", extra)
             self.assertLessEqual(len(extra), 801)
             self.assertNotIn("SECRET_ANSWER_42", extra)
+
+    def test_extra_system_cap_keeps_checklist_brief_excerpt(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "data" / "assignments" / "A1"
+            folder.mkdir(parents=True)
+            brief_head = "实验室小车情景摘录"
+            data_tail = "UNIQUE_DATA_TAIL_SHOULD_BE_CUT"
+            brief = brief_head + ("Q" * 2400) + data_tail
+            overlay_token = "【学科覆盖】物理陪练覆盖层"
+            captured = {"extra_system": None}
+
+            def _run_agent(messages, role_hint, **kwargs):
+                del messages, role_hint
+                captured["extra_system"] = kwargs.get("extra_system")
+                return {"reply": "OK"}
+
+            detail = _attachable_detail(
+                meta={"assignment_kind": "scenario", "content_source": "ai"},
+                requirements={"brief": brief, "discussion_goals": []},
+            )
+
+            def _make_deps(*, max_chars: int):
+                return _student_deps(
+                    root,
+                    run_agent=_run_agent,
+                    chat_extra_system_max_chars=max_chars,
+                    subject_prompt_overlay=lambda *_args, **_kwargs: overlay_token,
+                    build_verified_student_context=lambda _sid, _profile: "",
+                    build_assignment_detail_cached=lambda _folder, include_text=False: detail,
+                )
+
+            compute_chat_reply_sync(_Req(assignment_id="A1"), deps=_make_deps(max_chars=100_000))
+            full = str(captured["extra_system"] or "")
+            prefix = _extra_system_protected_prefix(full)
+            self.assertIn(overlay_token, prefix)
+            self.assertIn("【学习规则】", prefix)
+            self.assertIn("【考查清单】", prefix)
+            self.assertIn(brief_head, prefix)
+            self.assertIn("围绕老师材料摘录考查", prefix)
+            self.assertNotIn(data_tail, prefix)
+            self.assertLess(len(prefix), len(full))
+            max_chars = len(prefix)
+            self.assertLess(max_chars, len(full))
+
+            captured["extra_system"] = None
+            reply, role_hint, _last = compute_chat_reply_sync(
+                _Req(assignment_id="A1"), deps=_make_deps(max_chars=max_chars)
+            )
+            extra = str(captured["extra_system"] or "")
+            self.assertEqual(reply, "OK")
+            self.assertEqual(role_hint, "student")
+            self.assertIn(overlay_token, extra)
+            self.assertIn("【学习规则】", extra)
+            self.assertIn("【考查清单】", extra)
+            self.assertIn(brief_head, extra)
+            self.assertIn("围绕老师材料摘录考查", extra)
+            self.assertNotIn(data_tail, extra)
+            self.assertLessEqual(len(extra), max_chars + 1)
 
     def test_scenario_extra_system_uses_brief_not_authoring_rules(self):
         with TemporaryDirectory() as td:

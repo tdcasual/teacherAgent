@@ -12,6 +12,7 @@ from services.api.assignment_context_service import (
     load_assignment_stems,
     load_latest_practice_short_feedback,
     load_open_practice_stems,
+    submit_action_label,
 )
 
 AUTHORING = ("进入诊断问题", "【诊断问题】", "动态生成Q1", "列出考试", "考试分析")
@@ -220,6 +221,21 @@ class AssignmentContextServiceTest(unittest.TestCase):
             self.assertEqual(items[1]["stem_text"], "（题干文件缺失）")
             self.assertNotIn("LEAKED_SYMLINK", json.dumps(items, ensure_ascii=False))
 
+    def test_kind_rules_c_uses_submit_action_label(self):
+        self.assertEqual(submit_action_label("problem_set"), "提交作业")
+        self.assertEqual(submit_action_label("scenario"), "提交书面/照片")
+        self.assertEqual(submit_action_label("science_history"), "提交书面/照片")
+        self.assertEqual(submit_action_label("practical"), "提交实践照片")
+        problem_set = build_kind_coach_rules("problem_set")
+        self.assertIn("提醒学生用「提交作业」交照片或书面产物。", problem_set)
+        self.assertNotIn("提交书面/照片", problem_set)
+        scenario = build_kind_coach_rules("scenario")
+        self.assertIn("提醒学生用「提交书面/照片」交照片或书面产物。", scenario)
+        history = build_kind_coach_rules("science_history")
+        self.assertIn("提醒学生用「提交书面/照片」交照片或书面产物。", history)
+        practical = build_kind_coach_rules("practical")
+        self.assertIn("提醒学生用「提交实践照片」交照片或书面产物。", practical)
+
     def test_science_history_rules_forbid_invented_story(self):
         text = build_kind_coach_rules("science_history")
         self.assertIn("不要补一段历史故事", text)
@@ -406,8 +422,10 @@ class AssignmentContextServiceTest(unittest.TestCase):
             discussion_goals=[],
             extra_constraints="",
         )
-        self.assertIn("1. 围绕老师 brief 考查理解，不要另编情节。", empty)
-        self.assertNotIn("实验室小车", empty)
+        self.assertIn("1. 围绕老师材料摘录考查：实验室小车", empty)
+        self.assertIn("实验室小车", empty)
+        self.assertNotIn("INVENTED_STEM_SHOULD_NOT_APPEAR", empty)
+        self.assertNotIn("围绕老师 brief 考查理解", empty)
 
     def test_exam_checklist_science_history_forbids_invented_dates(self):
         text = build_exam_checklist(
@@ -417,8 +435,8 @@ class AssignmentContextServiceTest(unittest.TestCase):
             discussion_goals=[],
             extra_constraints="",
         )
-        self.assertIn("只根据老师材料问因果与概念", text)
-        self.assertIn("材料里没写", text)
+        self.assertIn("1. 围绕老师材料摘录考查：牛顿与苹果的课堂材料。", text)
+        self.assertNotIn("只根据老师材料问因果与概念", text)
         self.assertNotIn("1687", text)
         self.assertNotIn("Principia", text)
         with_goals = build_exam_checklist(
@@ -521,7 +539,8 @@ class AssignmentContextServiceTest(unittest.TestCase):
                 student_id="S001",
             )
             self.assertLess(practical.find("【学习规则】"), practical.find("【考查清单】"))
-            self.assertIn("引导学生描述自己的步骤与现象", practical)
+            self.assertIn("围绕老师材料摘录考查：记录自己的步骤。", practical)
+            self.assertNotIn("1. 引导学生描述自己的步骤与现象，不编未做实验。", practical)
             self.assertIn("提醒提交实践照片", practical)
             self.assertNotIn("【补练题干】", practical)
             self.assertNotIn("【补练短反馈】", practical)

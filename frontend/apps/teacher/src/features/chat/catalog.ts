@@ -24,7 +24,7 @@ export const fallbackSkills: Skill[] = [
   {
     id: 'student-coach',
     title: '学生教练',
-    desc: '学生侧讨论、作业批改与画像更新。',
+    desc: '作业陪练（只读今日/成绩）',
     instructions: '',
     prompts: ['开始今天作业。'],
     examples: ['开始今天作业', '查看我的作业结果'],

@@ -16,6 +16,7 @@ import type {
   WheelScrollZone,
 } from '../../appTypes';
 import { TEACHER_AUTH_ACCESS_TOKEN_KEY } from '../auth/teacherAuth';
+import { fallbackSkills } from './catalog';
 import { useTeacherChatApi, type UseTeacherChatApiParams } from './useTeacherChatApi';
 
 type StreamLogs = {
@@ -1102,5 +1103,12 @@ describe('useTeacherChatApi stream mapping', () => {
     await waitFor(() => {
       expect(confirmBodies).toEqual([{ confirm_id: 'abc123', confirmed: true }]);
     });
+  });
+});
+
+describe('fallbackSkills catalog copy', () => {
+  it('describes student-coach as read-only today/score coaching', () => {
+    const skill = fallbackSkills.find((item) => item.id === 'student-coach');
+    expect(skill?.desc).toBe('作业陪练（只读今日/成绩）');
   });
 });

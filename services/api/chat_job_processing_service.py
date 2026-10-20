@@ -525,10 +525,32 @@ def _with_attachment_context(extra_system: Optional[str], attachment_context: st
     return f"{extra_system}\n\n{attachment_block}".strip() if extra_system else attachment_block
 
 
+def _extra_system_protected_prefix(text: str) -> str:
+    payload = str(text or "")
+    start = payload.find("【考查清单】")
+    if start < 0:
+        return ""
+    tail = payload[start:]
+    marker_end = -1
+    for marker in ("以下为作业", "---BEGIN DATA---", "【作业题干】", "【附件上下文】"):
+        found = tail.find("\n\n" + marker)
+        if found >= 0 and (marker_end < 0 or found < marker_end):
+            marker_end = found
+    if marker_end >= 0:
+        return payload[: start + marker_end]
+    blank = tail.find("\n\n")
+    if blank >= 0:
+        return payload[: start + blank]
+    return payload
+
+
 def _cap_extra_system(text: Optional[str], *, max_chars: int) -> Optional[str]:
-    if text and len(text) > max_chars:
+    if not text or len(text) <= max_chars:
+        return text
+    prefix = _extra_system_protected_prefix(text)
+    if len(prefix) > max_chars:
         return text[:max_chars] + "…"
-    return text
+    return prefix + text[len(prefix) : max_chars] + "…"
 
 
 def _join_extra_system(*blocks: Optional[str]) -> Optional[str]:

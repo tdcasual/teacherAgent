@@ -17,13 +17,6 @@ _STEM_TEXT_MAX = 400
 _STEM_LIMIT_DEFAULT = 8
 _MISSING_STEM = "（题干文件缺失）"
 
-_KIND_RULES_HEADER = """【学习规则】
-A) 只讨论数据块里老师布置的材料。禁止另编题干、禁止另编情景/实验、禁止改数值/选项。
-B) 一次只问一个问题，等学生回答。
-C) 对话不是提交。提醒学生用「提交作业」交照片或书面产物。
-D) 公式：$...$ / $$...$$。禁止编造数据块没有的条件。
-E) 不要调用老师工具，不要生成作业，不要修改学生档案。"""
-
 _KIND_RULE_EXTRAS = {
     "problem_set": """F) 只解释数据块【作业题干】（及补练题干，若有）。禁止动态生成 Q1–Q4。
 G) 不直接给最终答案；先让学生解释再脚手架（最多 3 层）。
@@ -55,10 +48,31 @@ _NO_STEM_ITEM = "数据块无题干，只根据作业总要求提问"
 _PRACTICAL_PHOTO_ITEM = "提醒提交实践照片。"
 
 
+def submit_action_label(kind: str) -> str:
+    resolved = effective_assignment_kind({"assignment_kind": kind})
+    if resolved == "practical":
+        return "提交实践照片"
+    if resolved in {"scenario", "science_history"}:
+        return "提交书面/照片"
+    return "提交作业"
+
+
+def _kind_rules_header(kind: str) -> str:
+    label = submit_action_label(kind)
+    return (
+        "【学习规则】\n"
+        "A) 只讨论数据块里老师布置的材料。禁止另编题干、禁止另编情景/实验、禁止改数值/选项。\n"
+        "B) 一次只问一个问题，等学生回答。\n"
+        f"C) 对话不是提交。提醒学生用「{label}」交照片或书面产物。\n"
+        "D) 公式：$...$ / $$...$$。禁止编造数据块没有的条件。\n"
+        "E) 不要调用老师工具，不要生成作业，不要修改学生档案。"
+    )
+
+
 def build_kind_coach_rules(kind: str) -> str:
     resolved = effective_assignment_kind({"assignment_kind": kind})
     extra = _KIND_RULE_EXTRAS.get(resolved) or _KIND_RULE_EXTRAS["problem_set"]
-    return f"{_KIND_RULES_HEADER}\n{extra}"
+    return f"{_kind_rules_header(resolved)}\n{extra}"
 
 
 def _constraint_item(extra_constraints: str) -> str:
@@ -87,11 +101,15 @@ def _problem_set_checklist_items(stems: List[Dict[str, str]], *, room: int) -> L
     return items
 
 
-def _goal_checklist_items(goals: List[str], *, kind: str, room: int) -> List[str]:
+def _goal_checklist_items(goals: List[str], *, kind: str, brief: str, room: int) -> List[str]:
     if room <= 0:
         return []
     cleaned = [str(goal).strip() for goal in goals if str(goal or "").strip()]
     if not cleaned:
+        excerpt_src = str(brief or "").strip()
+        if excerpt_src:
+            excerpt = _clip(excerpt_src, 160)
+            return [_clip(f"1. 围绕老师材料摘录考查：{excerpt}", _CHECKLIST_ITEM_MAX)]
         fallback = _EMPTY_GOAL_FALLBACK.get(kind) or _EMPTY_GOAL_FALLBACK["scenario"]
         return [_clip(fallback, _CHECKLIST_ITEM_MAX)]
     return [
@@ -108,7 +126,6 @@ def build_exam_checklist(
     discussion_goals: list[str],
     extra_constraints: str,
 ) -> str:
-    del brief
     resolved = effective_assignment_kind({"assignment_kind": kind})
     constraint = _constraint_item(extra_constraints)
     photo = _PRACTICAL_PHOTO_ITEM if resolved == "practical" else ""
@@ -117,7 +134,9 @@ def build_exam_checklist(
     if resolved == "problem_set":
         items = _problem_set_checklist_items(stems, room=room)
     else:
-        items = _goal_checklist_items(discussion_goals, kind=resolved, room=room)
+        items = _goal_checklist_items(
+            discussion_goals, kind=resolved, brief=brief, room=room
+        )
     if photo:
         items.append(_clip(photo, _CHECKLIST_ITEM_MAX))
     if constraint:
