@@ -84,6 +84,9 @@ def test_payload_archive_includes_overlay_sqlite_not_live_or_wal(tmp_path: Path)
     live = project / "data" / "auth" / "auth_registry.sqlite3"
     live.parent.mkdir(parents=True)
     (project / "data" / "auth" / "notes.txt").write_text("keep-me", encoding="utf-8")
+    (project / "data" / "auth" / "admin_bootstrap.txt").write_text(
+        "plaintext-password", encoding="utf-8"
+    )
     (project / "data" / "auth" / "auth_registry.sqlite3-wal").write_text("wal", encoding="utf-8")
     (project / "data" / "auth" / "auth_registry.sqlite3-shm").write_bytes(b"shm")
     conn = sqlite3.connect(live)
@@ -135,6 +138,7 @@ def test_payload_archive_includes_overlay_sqlite_not_live_or_wal(tmp_path: Path)
     members = subprocess.check_output(["tar", "-tzf", str(archive)], text=True)
     assert "data/auth/auth_registry.sqlite3" in members
     assert "data/auth/notes.txt" in members
+    assert "admin_bootstrap.txt" not in members
     assert "sqlite3-wal" not in members
     assert "sqlite3-shm" not in members
 

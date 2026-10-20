@@ -136,6 +136,7 @@ build_payload_archive() {
     --exclude='*.sqlite3' \
     --exclude='*.sqlite3-wal' \
     --exclude='*.sqlite3-shm' \
+    --exclude='*bootstrap*' \
     --files-from "${include_file}" \
     || die "failed to build backup archive"
   if [[ -n "${overlay_list}" && -s "${overlay_list}" ]]; then
