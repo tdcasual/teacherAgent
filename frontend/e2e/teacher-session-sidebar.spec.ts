@@ -10,7 +10,7 @@ const openMobileMoreMenu = async (page: Page) => {
 
 const openMobileAuthPanel = async (page: Page) => {
   const menu = await openMobileMoreMenu(page)
-  await menu.getByRole('button', { name: '打开管理' }).click()
+  await menu.getByRole('menuitem', { name: '打开管理' }).click()
   const panel = page.getByRole('region', { name: '教师管理面板' })
   await expect(panel).toBeVisible()
   return panel
@@ -316,7 +316,7 @@ test('mobile more menu closes when tapping outside', async ({ page }) => {
   })
 
   await page.getByRole('button', { name: '更多' }).click()
-  const menuItem = page.getByRole('button', { name: '打开设置' }).first()
+  const menuItem = page.getByRole('menuitem', { name: '打开设置' }).first()
   await expect(menuItem).toBeVisible()
 
   await page.mouse.click(8, 220)
@@ -411,7 +411,7 @@ test('mobile settings modal overlays tabbar hit target', async ({ page }) => {
   })
 
   await page.getByRole('button', { name: '更多' }).click()
-  await page.getByRole('button', { name: '打开设置' }).click()
+  await page.getByRole('menuitem', { name: '打开设置' }).click()
   await expect(page.getByRole('dialog', { name: '设置' })).toBeVisible()
 
   const bottomHitIsSettingsOverlay = await page.evaluate(() => {

@@ -67,7 +67,7 @@ describe('TeacherTopbar desktop AI entry logo', () => {
     fireEvent.click(screen.getByRole('button', { name: '更多' }));
 
     expect(screen.getByRole('menu', { name: '移动端更多操作' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '打开管理' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: '打开管理' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '教师认证' })).toBeNull();
   });
 
