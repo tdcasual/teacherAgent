@@ -221,6 +221,36 @@ describe('AssignmentProgressSection', () => {
     expect(screen.getByTestId('progress-practice-S1').textContent).toContain('不适用');
   });
 
+  it('does not paint 官方分0 when photo received_without_items keeps score_earned null', () => {
+    render(
+      <AssignmentProgressSection
+        {...baseProps}
+        progressData={{
+          ok: true,
+          assignment_id: 'HW-PHOTO',
+          assignment_kind: 'practical',
+          students: [
+            {
+              student_id: 'S1',
+              complete: false,
+              submission: {
+                attempts: 1,
+                best: { score_earned: null, received_without_items: true },
+              },
+              official_score: null,
+              result: { attempts: 1, official_score: null, overdue: false, submitted: true },
+              process: { status: 'none' },
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/无官方分/)).toBeTruthy();
+    expect(screen.queryByText(/官方分0/)).toBeNull();
+    expect(screen.getByText('未自动出分，请老师覆盖')).toBeTruthy();
+  });
+
   it('posts merged adopted_coach_excerpts when adopting an excerpt', () => {
     const saveStudentGrade = vi.fn(async () => undefined);
     render(

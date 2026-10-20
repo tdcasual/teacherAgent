@@ -67,6 +67,8 @@ mkdir -p "${JOB_DIR}"
 
 INCLUDE_LIST="${JOB_DIR}/include.list"
 DOMAINS_JSON="${JOB_DIR}/domains.json"
+OVERLAY_DIR="${JOB_DIR}/sqlite_overlay"
+OVERLAY_LIST="${JOB_DIR}/sqlite_overlay.list"
 ARCHIVE_PATH="${JOB_DIR}/payload.tar.gz"
 MANIFEST_PATH="${JOB_DIR}/backup_manifest.json"
 
@@ -95,7 +97,19 @@ if [[ ! -s "${INCLUDE_LIST}" ]]; then
   die "include list is empty; no paths collected"
 fi
 
-build_archive "${ARCHIVE_PATH}" "${INCLUDE_LIST}" "${SNAPSHOT_TYPE}"
+mkdir -p "${OVERLAY_DIR}"
+python3 "${SCRIPT_DIR}/sqlite_snapshot.py" \
+  --project "${PROJECT_ROOT}" \
+  --domains "${DOMAINS_JSON}" \
+  --overlay "${OVERLAY_DIR}" \
+  >"${OVERLAY_LIST}"
+
+build_payload_archive \
+  "${ARCHIVE_PATH}" \
+  "${PROJECT_ROOT}" \
+  "${INCLUDE_LIST}" \
+  "${OVERLAY_DIR}" \
+  "${OVERLAY_LIST}"
 ARCHIVE_SHA="$(sha256_file "${ARCHIVE_PATH}")"
 ARCHIVE_SIZE="$(wc -c <"${ARCHIVE_PATH}" | tr -d ' ')"
 

@@ -119,7 +119,8 @@ def derive_profile_from_grading_report(
     """
     payload = report if isinstance(report, dict) else {}
     questions = _question_map(assignment_questions)
-    items = payload.get("items") if isinstance(payload.get("items"), list) else []
+    raw_items = payload.get("items")
+    items: list[Any] = raw_items if isinstance(raw_items, list) else []
     stats: Dict[str, Dict[str, int]] = {}
     order: List[str] = []
     question_ids: List[str] = []
@@ -163,10 +164,10 @@ def derive_profile_from_grading_report(
         correct = int(stat["correct"])
         acc = (correct / total) if total else 0.0
         mastery[kp] = {"accuracy": round(acc, 3), "attempts": total}
-        bucket = _bucket_for(acc, total=total, correct=correct)
-        if bucket == "weak":
+        level = _bucket_for(acc, total=total, correct=correct)
+        if level == "weak":
             weak.append(kp)
-        elif bucket == "strong":
+        elif level == "strong":
             strong.append(kp)
         else:
             medium.append(kp)

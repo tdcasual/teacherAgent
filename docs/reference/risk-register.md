@@ -56,6 +56,42 @@
 
 ## 已关闭风险
 
+### RISK-STUDENT-ASSIGNMENT-DETAIL-001
+- 风险描述：学生 `GET /assignment/{id}` 原样返回 `questions.csv` 全列（含 `answer_ref`）以及 meta 中的 `answer_files` / `expected_students`。
+- 状态：已关闭
+- 关闭说明：`public_student_assignment_detail` 对学生题目字段做 allowlist，并省略 `answer_files`、`expected_students`、`student_ids`。教师详情保持完整列。
+- 回滚：revert 该提交后学生详情会再次带出答案引用。
+- Owner：平台
+- 下次复审日期：2026-12-01
+- 退出条件：学生详情无 `answer_ref` / 答案列 / `answer_files`；教师详情仍含完整列。
+
+### RISK-STEM-REF-READ-001
+- 风险描述：作业详情与陪练题干读取将 `stem_ref` 解析为绝对路径或 `APP_ROOT` 相对路径，未套用作业目录 / 题库 jail，可读取 jail 外文本。
+- 状态：已关闭
+- 关闭说明：catalog 与 context 读取共用 `resolve_readable_stem_ref`（作业目录 jail 或 `data/question_bank` jail，含 symlink resolve）。jail 外路径不注入 `stem_text`。
+- 回滚：revert 该提交后详情/context 会再次按 APP_ROOT 裸读。
+- Owner：后端
+- 下次复审日期：2026-12-01
+- 退出条件：jail 外 `stem_ref`（含 symlink）不返回文件内容；作业目录与题库内题干仍可读。
+
+### RISK-AUTH-CHANGE-ME-001
+- 风险描述：example 使用 `change_me` 占位；compose `${:?}` 只拒绝空值；`validate_auth_secret_policy` 接受任意非空 `AUTH_TOKEN_SECRET`，生产可带着众所周知占位符启动。
+- 状态：已关闭
+- 关闭说明：example 必填密钥留空；生产拒绝空密钥与字面量 `change_me`。
+- 回滚：revert 该提交后 example 再次带 `change_me`，生产策略再次放行占位符。
+- Owner：平台
+- 下次复审日期：2026-12-01
+- 退出条件：example 必填密钥为空；生产 `AUTH_TOKEN_SECRET=change_me` 启动失败。
+
+### RISK-BACKUP-AUTH-OMIT-001
+- 风险描述：备份 include 列表不含 `data/auth` 与 `data/student_submissions`，registry SQLite 与学生提交物不进归档。
+- 状态：已关闭
+- 关闭说明：两个目录加入 domain 列表；live `*.sqlite3` 经 `sqlite3.Connection.backup` 快照后再入 tar，不直接打包正在写入的数据库文件。
+- 回滚：revert 该提交后备份再次省略 auth/submissions，并恢复直接 tar 数据库文件。
+- Owner：运维
+- 下次复审日期：2026-12-01
+- 退出条件：domain 列表含 `data/auth` 与 `data/student_submissions`；registry SQLite 经 backup API 快照后单独追加进 tar（live `*.sqlite3` 排除不得吞掉 overlay）。
+
 ### RISK-TOKEN-VERSION-SET-PASSWORD-001
 - 风险描述：`set_password` 过去只更新密码哈希、不递增 `token_version`，且师生 Bearer 缺 `tv` 仍放行，改密后旧 access token 继续有效。
 - 状态：已关闭
@@ -63,6 +99,7 @@
 - 回滚：revert 代码（旧代码会再次忽略缺 tv，且仍接受带 tv 的新 token）。若生产已发出新 token 后必须回滚：旋转 `AUTH_TOKEN_SECRET` / `AUTH_TOKEN_SECRET_FILE`。
 - Owner：平台
 - 下次复审日期：2026-12-01
+- 退出条件：改密递增 `token_version` 并签发新 token；缺 `tv` 的师生/管理员 Bearer 一律 401 `token_revoked`。
 
 ### RISK-MASTERKEY-CRYPTO-001
 - 风险描述：加密算法为自制流密码（非 AEAD）。

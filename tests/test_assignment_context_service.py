@@ -149,6 +149,77 @@ class AssignmentContextServiceTest(unittest.TestCase):
             self.assertEqual(items[0]["stem_text"], "（题干文件缺失）")
             self.assertNotIn("answer_ref", items[0])
 
+    def test_load_assignment_stems_rejects_absolute_path_outside_jail(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "assignments" / "A1"
+            folder.mkdir(parents=True)
+            secret = root / "tmp" / "secret.md"
+            secret.parent.mkdir(parents=True)
+            secret.write_text("LEAKED_CONTEXT_STEM", encoding="utf-8")
+            _write_questions_csv(
+                folder / "questions.csv",
+                [
+                    {
+                        "question_id": "Q1",
+                        "kp_id": "kp.x",
+                        "difficulty": "basic",
+                        "type": "calc",
+                        "stem_ref": str(secret),
+                        "answer_ref": "",
+                        "source": "upload",
+                        "tags": "",
+                    }
+                ],
+            )
+            items = load_assignment_stems(folder, app_root=root, data_dir=root)
+            self.assertEqual(items[0]["stem_text"], "（题干文件缺失）")
+            self.assertNotIn("LEAKED_CONTEXT_STEM", json.dumps(items, ensure_ascii=False))
+
+    def test_load_assignment_stems_reads_bank_and_rejects_symlink_escape(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "assignments" / "A1"
+            folder.mkdir(parents=True)
+            bank = root / "question_bank" / "stems" / "b1.md"
+            bank.parent.mkdir(parents=True)
+            bank.write_text("题库可见题干", encoding="utf-8")
+            secret = root / "tmp" / "secret.md"
+            secret.parent.mkdir(parents=True)
+            secret.write_text("LEAKED_SYMLINK", encoding="utf-8")
+            link = folder / "stems" / "escape.md"
+            link.parent.mkdir(parents=True)
+            link.symlink_to(secret)
+            _write_questions_csv(
+                folder / "questions.csv",
+                [
+                    {
+                        "question_id": "QB",
+                        "kp_id": "kp.x",
+                        "difficulty": "basic",
+                        "type": "calc",
+                        "stem_ref": str(bank),
+                        "answer_ref": "",
+                        "source": "bank",
+                        "tags": "",
+                    },
+                    {
+                        "question_id": "QE",
+                        "kp_id": "kp.x",
+                        "difficulty": "basic",
+                        "type": "calc",
+                        "stem_ref": str(link),
+                        "answer_ref": "",
+                        "source": "upload",
+                        "tags": "",
+                    },
+                ],
+            )
+            items = load_assignment_stems(folder, app_root=root, data_dir=root)
+            self.assertEqual(items[0]["stem_text"], "题库可见题干")
+            self.assertEqual(items[1]["stem_text"], "（题干文件缺失）")
+            self.assertNotIn("LEAKED_SYMLINK", json.dumps(items, ensure_ascii=False))
+
     def test_science_history_rules_forbid_invented_story(self):
         text = build_kind_coach_rules("science_history")
         self.assertIn("不要补一段历史故事", text)

@@ -251,9 +251,10 @@ def official_score_from(
     auto_score: Any,
     teacher_grade: Optional[Dict[str, Any]],
 ) -> Optional[float]:
-    if isinstance(teacher_grade, dict) and teacher_grade.get("override_score_earned") is not None:
+    raw_override = teacher_grade.get("override_score_earned") if isinstance(teacher_grade, dict) else None
+    if raw_override is not None:
         try:
-            return float(teacher_grade.get("override_score_earned"))
+            return float(raw_override)
         except (TypeError, ValueError):
             _log.debug("invalid override_score_earned", exc_info=True)
     if auto_score is None or auto_score == "":

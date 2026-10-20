@@ -154,6 +154,50 @@ def resolve_bank_ref(ref: str, *, data_dir: Path, app_root: Path) -> Optional[Pa
     return path
 
 
+def resolve_assignment_folder_ref(
+    ref: str, *, out_dir: Path, app_root: Path
+) -> Optional[Path]:
+    raw = str(ref or "").strip()
+    if not raw:
+        return None
+    path = Path(raw)
+    if not path.is_absolute():
+        path = (Path(app_root) / path).resolve()
+    else:
+        path = path.resolve()
+    jail = Path(out_dir).resolve()
+    if path != jail and jail not in path.parents:
+        return None
+    if not path.is_file():
+        return None
+    return path
+
+
+def resolve_readable_stem_ref(
+    ref: str,
+    *,
+    folder: Path,
+    app_root: Path,
+    data_dir: Path,
+) -> Optional[Path]:
+    raw = str(ref or "").strip()
+    if not raw:
+        return None
+    folder_hit = resolve_assignment_folder_ref(raw, out_dir=folder, app_root=app_root)
+    if folder_hit is not None:
+        return folder_hit
+    rel = Path(raw)
+    if not rel.is_absolute():
+        candidate = (Path(folder) / raw).resolve()
+        jail = Path(folder).resolve()
+        if (candidate == jail or jail in candidate.parents) and candidate.is_file():
+            return candidate
+    bank_hit = resolve_bank_ref(raw, data_dir=data_dir, app_root=app_root)
+    if bank_hit is not None and bank_hit.is_file():
+        return bank_hit
+    return None
+
+
 def stem_text_for_row(
     row: dict,
     *,

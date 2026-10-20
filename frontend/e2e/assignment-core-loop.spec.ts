@@ -162,7 +162,7 @@ test('mocked assignment how-to loop covers upload confirm today submit and progr
           return raw ? JSON.parse(raw) : null
         }),
       )
-      .toEqual({ type: 'assignment', job_id: JOB_ID })
+      .toEqual({ type: 'assignment', job_id: JOB_ID, assignment_kind: 'problem_set' })
 
     const confirmBtn = assignmentConfirmButton(teacherPage)
     await expect(confirmBtn).toBeVisible()

@@ -192,6 +192,8 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
         <button
           type="button"
           role="tab"
+          id="teacher-workbench-tab-skills"
+          aria-controls="teacher-workbench-panel-skills"
           tabIndex={workbenchTab === 'skills' ? 0 : -1}
           aria-selected={workbenchTab === 'skills'}
           className={`border-0 bg-transparent text-muted text-[12px] py-[6px] px-[12px] min-h-[44px] cursor-pointer ${workbenchTab === 'skills' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,var(--color-surface))] !text-accent font-semibold' : ''}`}
@@ -202,6 +204,8 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
         <button
           type="button"
           role="tab"
+          id="teacher-workbench-tab-memory"
+          aria-controls="teacher-workbench-panel-memory"
           tabIndex={workbenchTab === 'memory' ? 0 : -1}
           aria-selected={workbenchTab === 'memory'}
           className={`border-0 border-l border-[color:color-mix(in_oklab,var(--color-border)_80%,var(--color-surface))] bg-transparent text-muted text-[12px] py-[6px] px-[12px] min-h-[44px] cursor-pointer ${workbenchTab === 'memory' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,var(--color-surface))] !text-accent font-semibold' : ''}`}
@@ -212,6 +216,8 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
         <button
           type="button"
           role="tab"
+          id="teacher-workbench-tab-workflow"
+          aria-controls="teacher-workbench-panel-workflow"
           tabIndex={workbenchTab === 'workflow' ? 0 : -1}
           aria-selected={workbenchTab === 'workflow'}
           className={`border-0 border-l border-[color:color-mix(in_oklab,var(--color-border)_80%,var(--color-surface))] bg-transparent text-muted text-[12px] py-[6px] px-[12px] min-h-[44px] cursor-pointer ${workbenchTab === 'workflow' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,var(--color-surface))] !text-accent font-semibold' : ''}`}
@@ -220,7 +226,12 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
           工作流
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,var(--color-surface))] pt-3">
+      <div
+        className="min-h-0 flex-1 overflow-hidden border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,var(--color-surface))] pt-3"
+        role="tabpanel"
+        id={`teacher-workbench-panel-${workbenchTab}`}
+        aria-labelledby={`teacher-workbench-tab-${workbenchTab}`}
+      >
         {workbenchTab === 'skills' ? (
           <SkillsTab
             apiBase={viewModel.apiBase}

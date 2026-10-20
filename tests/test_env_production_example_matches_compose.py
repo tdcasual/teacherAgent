@@ -7,11 +7,11 @@ _ENV_ASSIGNMENT = re.compile(r"^([A-Z][A-Z0-9_]+)=(.*)$", re.M)
 _EXAMPLE_PATHS = (".env.production.min.example", ".env.example")
 _REQUIRED_SECRETS = ("REDIS_PASSWORD", "MCP_API_KEY", "AUTH_TOKEN_SECRET", "MASTER_KEY")
 _REMAINING_PLACEHOLDERS = {
-    "REDIS_PASSWORD": "change_me",
-    "AUTH_TOKEN_SECRET": "change_me",
+    "REDIS_PASSWORD": "",
+    "AUTH_TOKEN_SECRET": "",
     "AUTH_REQUIRED": "1",
     "RQ_SCAN_PENDING_ON_START": "1",
-    "MASTER_KEY": "change_me",
+    "MASTER_KEY": "",
     "APP_ENV": "production",
     "CORS_ORIGINS": "http://localhost:3001,http://localhost:3002",
 }
@@ -68,9 +68,7 @@ def test_production_redis_url_includes_password_placeholder_when_compose_require
     for path in _EXAMPLE_PATHS:
         assignments = _example_assignments(path)
         redis_url = assignments.get("REDIS_URL", "")
-        assert "REDIS_PASSWORD" in redis_url or ":change_me@" in redis_url, (
-            f"{path} REDIS_URL must include a password placeholder"
-        )
+        assert "REDIS_PASSWORD" in redis_url, f"{path} REDIS_URL must include REDIS_PASSWORD"
 
 
 def test_readme_five_minute_start_mentions_required_secrets() -> None:
@@ -81,3 +79,4 @@ def test_readme_five_minute_start_mentions_required_secrets() -> None:
     assert ".env.production.min.example" in section
     assert "docker compose up" in section
     assert "填" in section or "Fill" in section or "replace" in section.lower()
+    assert "${VAR:?}" in section or "${:?}" in section or "空" in section

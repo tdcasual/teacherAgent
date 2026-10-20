@@ -272,6 +272,8 @@ def _read_progress(deps: StudentSubmitDeps, assignment_id: str, student_id: str)
 
 def _is_grade_script_http_failure(exc: Exception) -> bool:
     status = getattr(exc, "status_code", None)
+    if status is None:
+        return False
     try:
         return int(status) >= 500
     except (TypeError, ValueError):
@@ -494,7 +496,7 @@ def _maybe_trigger_rubric_suggest(
 
 
 def _write_derived_profile(
-    deps: StudentSubmitDeps,
+    deps: Any,
     assignment_id: str,
     student_id: str,
     *,
@@ -518,7 +520,8 @@ def _write_derived_profile(
             questions = _load_assignment_questions(folder)
         meta = _load_json_object(folder / "meta.json")
         requirements = _load_json_object(folder / "requirements.json")
-        target_kp = meta.get("target_kp") if isinstance(meta.get("target_kp"), list) else []
+        raw_kp = meta.get("target_kp")
+        target_kp = raw_kp if isinstance(raw_kp, list) else []
         derived = derive_profile_from_grading_report(
             report=report,
             assignment_questions=questions if isinstance(questions, list) else [],

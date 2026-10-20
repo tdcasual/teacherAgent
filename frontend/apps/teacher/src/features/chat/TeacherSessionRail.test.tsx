@@ -10,6 +10,8 @@ afterEach(() => {
   cleanup();
 });
 
+const noop = () => undefined;
+
 const railProps = {
   skillsOpen: false,
   setSessionSidebarOpen: vi.fn(),
@@ -20,7 +22,30 @@ const railProps = {
   setSessionError: vi.fn(),
   setOpenSessionMenuId: vi.fn(),
   closeSessionSidebarOnMobile: vi.fn(),
-} as const;
+  historyQuery: '',
+  historyLoading: false,
+  historyError: '',
+  showArchivedSessions: false,
+  visibleHistoryCount: 0,
+  groupedHistorySessions: [],
+  activeSessionId: 'main',
+  openSessionMenuId: '',
+  deletedSessionIds: [],
+  historyHasMore: false,
+  sessionHasMore: false,
+  sessionLoading: false,
+  sessionError: '',
+  onStartNewSession: noop,
+  onRefreshSessions: noop,
+  onToggleArchived: noop,
+  onHistoryQueryChange: noop,
+  onToggleSessionMenu: noop,
+  onRenameSession: noop,
+  onToggleSessionArchive: noop,
+  onLoadOlderMessages: noop,
+  getSessionTitle: (sessionId: string) => sessionId,
+  formatSessionUpdatedLabel: (updatedAt?: string) => updatedAt || '',
+};
 
 describe('TeacherSessionRail overlay', () => {
   it('hides_overlay_button_when_closed', () => {

@@ -293,6 +293,11 @@ describe('TeacherAppLayout', () => {
     expect(screen.queryByTestId('teacher-chat')).toBeNull();
     expect(screen.queryByTestId('teacher-workbench')).toBeNull();
     expect(screen.queryByTestId('teacher-session-rail')).toBeNull();
+    const skip = screen.getByRole('link', { name: '跳到主内容' });
+    expect(skip.getAttribute('href')).toBe('#teacher-chat-main');
+    const target = document.getElementById('teacher-chat-main');
+    expect(target).toBeTruthy();
+    expect(target?.tabIndex).toBe(-1);
   });
 
   it('opens session rename and archive dialogs from session ids', () => {

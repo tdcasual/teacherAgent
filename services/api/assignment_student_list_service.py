@@ -113,8 +113,9 @@ def _official_score(
 ) -> Any:
     auto_score = None
     if attempt:
+        raw_score = attempt.get("score_earned")
         try:
-            auto_score = float(attempt.get("score_earned"))
+            auto_score = float(raw_score) if raw_score is not None else None
         except (TypeError, ValueError):
             auto_score = None
     return official_score_from(

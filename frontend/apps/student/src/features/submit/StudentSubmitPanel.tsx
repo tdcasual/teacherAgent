@@ -155,7 +155,7 @@ export default function StudentSubmitPanel({
           {chatConfirmArmed ? (
             <button
               type="button"
-              className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border-none bg-accent px-4 py-2 text-[13px] font-medium text-white disabled:opacity-60"
+              className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border-none bg-accent px-4 py-2 text-[13px] font-medium text-on-accent disabled:opacity-60"
               disabled={busy || chatFiles.length === 0}
               onClick={() => {
                 void runSubmit();
@@ -166,7 +166,7 @@ export default function StudentSubmitPanel({
           ) : (
             <button
               type="button"
-              className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border-none bg-accent px-4 py-2 text-[13px] font-medium text-white disabled:opacity-60"
+              className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border-none bg-accent px-4 py-2 text-[13px] font-medium text-on-accent disabled:opacity-60"
               disabled={busy || !pickedFiles.length}
               onClick={() => {
                 void runSubmit();

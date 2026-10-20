@@ -463,7 +463,8 @@ def _try_heal_existing_meta(
     finally:
         conn.close()
     _mark_confirmed(job_id, deps)
-    question_ids = existing.get("question_ids") if isinstance(existing.get("question_ids"), list) else []
+    raw_question_ids = existing.get("question_ids")
+    question_ids = raw_question_ids if isinstance(raw_question_ids, list) else []
     return _ok_payload(assignment_id, len(question_ids), list(existing.get("requirements_missing") or []), [])
 
 
@@ -892,8 +893,13 @@ def build_default_folder_finalize_deps(data_dir: Path) -> AssignmentUploadConfir
         parse_ids_value=parse_ids_value,
         resolve_scope=resolve_scope,
         normalize_due_at=normalize_due_at,
-        compute_expected_students=lambda *args, **kwargs: compute_expected_students(
-            *args, **kwargs, data_dir=data_dir
+        compute_expected_students=lambda scope, class_name, student_ids, teacher_id="", subject_id="", **_kwargs: compute_expected_students(
+            scope,
+            class_name,
+            student_ids,
+            teacher_id=teacher_id,
+            subject_id=subject_id,
+            data_dir=data_dir,
         ),
         atomic_write_json=atomic_write_json,
         copy2=lambda src, dst: dst.write_bytes(src.read_bytes()),

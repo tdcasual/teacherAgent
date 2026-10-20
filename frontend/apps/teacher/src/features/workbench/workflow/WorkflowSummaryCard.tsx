@@ -51,7 +51,7 @@ export default function WorkflowSummaryCard(props: WorkflowSummaryCardProps) {
           </div>
           <button
             type="button"
-            className="inline-flex w-full items-center justify-center rounded-xl border-none bg-accent px-[14px] py-[10px] text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+            className="inline-flex w-full items-center justify-center rounded-xl border-none bg-accent px-[14px] py-[10px] text-on-accent cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
             onClick={() => scrollToWorkflowSection(guidance.primaryActionTargetId)}
           >
             {guidance.primaryActionLabel}

@@ -178,6 +178,9 @@ def test_student_assignment_detail_hides_orphan_without_teacher_id() -> None:
         assert res.status_code == 403
 
 
+
+
+
 def test_teacher_assignments_progress_filters_to_owner() -> None:
     with _auth_env(), TemporaryDirectory() as td:
         tmp = Path(td)

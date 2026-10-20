@@ -28,6 +28,9 @@
 - 学生 JWT/`actor_id` 只能操作自己的档案。admin/service 可对学生 search/get/update 使用显式 `student_id`，不可经工具冒充教师 MEMORY.md。
 - `assignment.render` 显式 `--out` 必须落在 `DATA_DIR` 下；默认 PDF 路径仍为 `output/pdf/assignment_{id}.pdf`。
 - `student.import` 工具恒 `410 gone`。
+- 学生 `GET /assignment/{id}` 只返回题目 allowlist（`question_id` / `kp_id` / `stem_text` 等），不含 `answer_ref`、`stem_ref`、任意答案列，也不含 meta 的 `answer_files` / `expected_students` / `student_ids`。教师详情保持完整字段。
+- 作业题干读取（catalog / context）将 `stem_ref` 限制在该作业目录或 `DATA_DIR/question_bank`（含 symlink resolve）。
+- 生产环境 `AUTH_TOKEN_SECRET` 不得为空或为 `change_me`。
 
 ## 相关文档
 - `docs/how-to/admin-manage-teachers-tui.md`

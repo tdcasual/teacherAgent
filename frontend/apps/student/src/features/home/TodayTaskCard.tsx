@@ -35,7 +35,7 @@ export default function TodayTaskCard({ viewModel, onPrimaryAction }: TodayTaskC
         <button
           type="button"
           data-testid="student-today-primary-action"
-          className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[16px] border-none bg-accent px-5 py-3 text-[14px] font-medium text-white shadow-[0_10px_18px_rgba(0,82,204,0.18)] disabled:cursor-not-allowed disabled:opacity-60 md:min-w-[132px] md:w-auto"
+          className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[16px] border-none bg-accent px-5 py-3 text-[14px] font-medium text-on-accent shadow-[0_10px_18px_rgba(0,82,204,0.18)] disabled:cursor-not-allowed disabled:opacity-60 md:min-w-[132px] md:w-auto"
           onClick={onPrimaryAction}
           disabled={viewModel.primaryActionDisabled}
         >

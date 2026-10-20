@@ -200,11 +200,13 @@ describe('StudentAssignmentHistoryPage', () => {
     expect(screen.getByTestId('student-portrait-card')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('student-practice-start-HW_DONE'));
-    await waitFor(() =>
-      expect(String(fetchMock.mock.calls.at(-1)?.[0])).toBe(
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls;
+      const lastCall = calls[calls.length - 1];
+      expect(String(lastCall?.[0])).toBe(
         'http://localhost:8000/student/assignment/HW_DONE/practice',
-      ),
-    );
+      );
+    });
     await waitFor(() => expect(screen.getAllByText('题库不足').length).toBeGreaterThan(0));
   });
 });

@@ -54,7 +54,7 @@ def _persist_confirmation_pause(
     deps: ChatJobProcessDeps,
 ) -> None:
     confirm_id = str(pause.get("confirm_id") or "")
-    payload = {
+    payload: Dict[str, Any] = {
         "confirm_pending": {
             "confirm_id": confirm_id,
             "tool": str(pause.get("tool") or ""),

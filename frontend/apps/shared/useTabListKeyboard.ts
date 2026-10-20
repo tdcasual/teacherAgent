@@ -29,6 +29,13 @@ export function useTabListKeyboard<T extends string>({
       }
       event.preventDefault();
       onChange(tabs[next]);
+      const root = event.currentTarget;
+      const tablist =
+        root.getAttribute('role') === 'tablist' ? root : root.closest('[role="tablist"]');
+      if (!(tablist instanceof HTMLElement)) return;
+      const tabNodes = tablist.querySelectorAll('[role="tab"]');
+      const node = tabNodes.item(next);
+      if (node instanceof HTMLElement) node.focus();
     },
     [onChange, tabs, value],
   );

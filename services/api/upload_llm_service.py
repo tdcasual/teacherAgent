@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-
-
 _log = logging.getLogger(__name__)
 
 
@@ -274,7 +272,7 @@ def xlsx_to_table_preview(path: Path, *, deps: UploadLlmDeps, max_rows: int = 60
         if not rows:
             return ""
         compact_students = _extract_xlsx_students_compact(rows)
-        used_cols = set()
+        used_cols: set[Any] = set()
         for _, cells in rows[:max_rows]:
             used_cols.update(cells.keys())
         col_list = sorted([c for c in used_cols if isinstance(c, int)])[:max_cols]

@@ -286,7 +286,8 @@ def confirm_teacher_tool(
     consumed = consume_tool_confirm_pending(confirm_id, actor_id=actor_id, data_dir=data_dir)
     if consumed.get("error"):
         return consumed
-    pending = consumed.get("pending") if isinstance(consumed.get("pending"), dict) else {}
+    raw_pending = consumed.get("pending")
+    pending: Dict[str, Any] = raw_pending if isinstance(raw_pending, dict) else {}
     job_id = str(pending.get("job_id") or "")
     lane_id = str(pending.get("lane_id") or "")
     if confirmed:

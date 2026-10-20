@@ -81,10 +81,12 @@ domain_paths_json() {
 [
   {"domain":"raw","path":"data/exams","required":false},
   {"domain":"raw","path":"data/assignments","required":false},
+  {"domain":"raw","path":"data/student_submissions","required":false},
   {"domain":"raw","path":"uploads","required":false},
   {"domain":"derived","path":"data/analysis","required":false},
   {"domain":"serving","path":"data/student_profiles","required":false},
   {"domain":"serving","path":"data/teacher_workspaces","required":false},
+  {"domain":"serving","path":"data/auth","required":false},
   {"domain":"serving","path":"data/_system","required":false}
 ]
 JSON
@@ -109,6 +111,42 @@ build_archive() {
   else
     die "unsupported snapshot type: ${mode}"
   fi
+}
+
+build_payload_archive() {
+  local archive_path="$1"
+  local project_root="$2"
+  local include_file="$3"
+  local overlay_dir="$4"
+  local overlay_list="$5"
+  local staging="${archive_path}.staging.tar"
+
+  require_cmd tar
+  require_cmd gzip
+  [[ -n "${archive_path}" ]] || die "archive path is required"
+  [[ -n "${project_root}" ]] || die "project root is required"
+  [[ -s "${include_file}" ]] || die "include list is empty; no paths collected"
+
+  rm -f "${staging}" "${archive_path}"
+  # GNU tar applies --exclude to every later --files-from in the same
+  # invocation, so overlay sqlite snapshots must be appended without those
+  # globs. gzip archives cannot be appended; stage uncompressed first.
+  tar -cf "${staging}" \
+    -C "${project_root}" \
+    --exclude='*.sqlite3' \
+    --exclude='*.sqlite3-wal' \
+    --exclude='*.sqlite3-shm' \
+    --files-from "${include_file}" \
+    || die "failed to build backup archive"
+  if [[ -n "${overlay_list}" && -s "${overlay_list}" ]]; then
+    [[ -n "${overlay_dir}" && -d "${overlay_dir}" ]] || die "sqlite overlay dir is required"
+    tar -rf "${staging}" \
+      -C "${overlay_dir}" \
+      --files-from "${overlay_list}" \
+      || die "failed to append sqlite overlay to backup archive"
+  fi
+  gzip -n -f "${staging}" || die "failed to compress backup archive"
+  mv "${staging}.gz" "${archive_path}"
 }
 
 sha256_file() {

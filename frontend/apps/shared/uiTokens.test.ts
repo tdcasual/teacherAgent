@@ -85,7 +85,13 @@ describe('ui accent, font, and color-scheme tokens', () => {
 
   const relativeLuminance = (hex: string): number => {
     const raw = hex.replace('#', '');
-    const n = raw.length === 3 ? raw.split('').map((c) => c + c).join('') : raw;
+    const n =
+      raw.length === 3
+        ? raw
+            .split('')
+            .map((c) => c + c)
+            .join('')
+        : raw;
     const channel = (value: string) => {
       const srgb = parseInt(value, 16) / 255;
       return srgb <= 0.03928 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
@@ -138,7 +144,15 @@ describe('ui accent, font, and color-scheme tokens', () => {
       const source = readFileSync(file, 'utf8');
       expect(source, file).not.toMatch(/text-\[#[0-9a-fA-F]{3,8}\]/);
       expect(source, file).not.toMatch(/bg-\[#[0-9a-fA-F]{3,8}\]/);
-      expect(source, file).not.toMatch(/bg-accent text-white/);
+      const classValues = source.match(/className=(?:\{`[\s\S]*?`\}|"[^"]*"|'[^']*')/g) || [];
+      for (const value of classValues) {
+        const hasAccentBg = /\bbg-accent\b/.test(value);
+        const hasWhiteText = /\btext-white\b/.test(value);
+        expect(
+          hasAccentBg && hasWhiteText,
+          `${file} className mixes bg-accent and text-white`,
+        ).toBe(false);
+      }
     }
     const teacherEb = readFrontend('apps/teacher/src/ErrorBoundary.tsx');
     const studentEb = readFrontend('apps/student/src/ErrorBoundary.tsx');

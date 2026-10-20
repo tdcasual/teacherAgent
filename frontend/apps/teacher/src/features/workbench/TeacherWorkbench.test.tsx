@@ -103,8 +103,17 @@ describe('TeacherWorkbench header', () => {
     const viewModel = buildViewModel();
     render(<TeacherWorkbench viewModel={viewModel} />);
     const tablist = screen.getByRole('tablist', { name: '工作台分区' });
+    const skillsTab = screen.getByRole('tab', { name: '能力' });
+    const memoryTab = screen.getByRole('tab', { name: '自动记忆' });
+    expect(skillsTab.getAttribute('aria-controls')).toBe('teacher-workbench-panel-skills');
+    expect(screen.getByRole('tabpanel').getAttribute('id')).toBe('teacher-workbench-panel-skills');
+    expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe(
+      'teacher-workbench-tab-skills',
+    );
+    skillsTab.focus();
     fireEvent.keyDown(tablist, { key: 'ArrowRight' });
     expect(viewModel.setWorkbenchTab).toHaveBeenCalledWith('memory');
+    expect(document.activeElement).toBe(memoryTab);
   });
 
   it('stacks the summary CTA for narrow workbench widths', () => {

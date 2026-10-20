@@ -100,7 +100,7 @@ export default function StudentAssignmentHistoryPage({
                 {canSubmitItem(item) ? (
                   <button
                     type="button"
-                    className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border-none bg-accent px-4 py-2 text-[13px] font-medium text-white"
+                    className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border-none bg-accent px-4 py-2 text-[13px] font-medium text-on-accent"
                     onClick={() => onSubmit(item.assignment_id)}
                   >
                     补交 {item.title}

@@ -75,6 +75,23 @@ def test_production_auth_required_0_without_secret_raises_startup_error(monkeypa
         validate_auth_secret_policy()
 
 
+def test_production_change_me_token_secret_raises_startup_error(monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("AUTH_REQUIRED", "1")
+    monkeypatch.setenv("AUTH_TOKEN_SECRET", "change_me")
+
+    with pytest.raises(RuntimeError, match="AUTH_TOKEN_SECRET"):
+        validate_auth_secret_policy()
+
+
+def test_development_change_me_token_secret_is_allowed(monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("AUTH_REQUIRED", "1")
+    monkeypatch.setenv("AUTH_TOKEN_SECRET", "change_me")
+
+    validate_auth_secret_policy()
+
+
 def _load_app_auth_mode(tmp_dir: Path, *, auth_required: str, secret: str, app_env: str):
     env_overrides = {
         "MASTER_KEY_DEV_DEFAULT": "dev-key",

@@ -407,8 +407,19 @@ def test_get_assignment_detail_strips_roster_ids_for_students(monkeypatch):
                     "subject_id": "physics",
                     "expected_students": ["student_b", "student_c"],
                     "student_ids": ["student_b"],
+                    "answer_files": ["answers/q1.md"],
                     "due_at": "2026-09-02",
                 },
+                "questions": [
+                    {
+                        "question_id": "Q1",
+                        "kp_id": "力学",
+                        "stem_ref": "stems/q1.md",
+                        "stem_text": "求加速度",
+                        "answer_ref": "answers/q1.md",
+                        "secret_answer": "SECRET_KEY",
+                    }
+                ],
             }
 
     deps = _Deps()
@@ -420,3 +431,35 @@ def test_get_assignment_detail_strips_roster_ids_for_students(monkeypatch):
     assert payload["meta"]["due_at"] == "2026-09-02"
     assert "expected_students" not in payload["meta"]
     assert "student_ids" not in payload["meta"]
+    assert "answer_files" not in payload["meta"]
+    question = payload["questions"][0]
+    assert question["question_id"] == "Q1"
+    assert question["stem_text"] == "求加速度"
+    assert "answer_ref" not in question
+    assert "secret_answer" not in question
+    assert "stem_ref" not in question
+
+
+def test_get_assignment_detail_keeps_answer_metadata_for_teachers(monkeypatch):
+    monkeypatch.setattr("services.api.assignment.application.require_assignment_access", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        "services.api.assignment.application.get_current_principal",
+        lambda: AuthPrincipal(actor_id="t1", role="teacher"),
+    )
+
+    class _Deps:
+        async def assignment_detail(self, _assignment_id: str):
+            return {
+                "assignment_id": "HW_OK",
+                "meta": {
+                    "teacher_id": "t1",
+                    "expected_students": ["student_b"],
+                    "answer_files": ["answers/q1.md"],
+                },
+                "questions": [{"question_id": "Q1", "answer_ref": "answers/q1.md"}],
+            }
+
+    payload = asyncio.run(get_assignment_detail("HW_OK", deps=_Deps()))
+    assert payload["meta"]["expected_students"] == ["student_b"]
+    assert payload["meta"]["answer_files"] == ["answers/q1.md"]
+    assert payload["questions"][0]["answer_ref"] == "answers/q1.md"

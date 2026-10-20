@@ -15,6 +15,7 @@ from .assignment_student_list_service import (  # noqa: F401
     list_assignments_for_student as list_assignments_for_student,
 )
 from .auth.identity_graph_service import ExpectedStudentsError
+from .question_bank_select_service import resolve_readable_stem_ref
 
 _log = logging.getLogger(__name__)
 _DEFAULT_LIST_LIMIT = 50
@@ -359,10 +360,14 @@ def build_assignment_detail(
                 item = dict(row)
                 stem_ref = item.get("stem_ref") or ""
                 if include_text and stem_ref:
-                    stem_path = Path(stem_ref)
-                    if not stem_path.is_absolute():
-                        stem_path = deps.app_root / stem_path
-                    item["stem_text"] = read_text_safe(stem_path)
+                    stem_path = resolve_readable_stem_ref(
+                        str(stem_ref),
+                        folder=folder,
+                        app_root=deps.app_root,
+                        data_dir=deps.data_dir,
+                    )
+                    if stem_path is not None:
+                        item["stem_text"] = read_text_safe(stem_path)
                 questions.append(item)
 
     delivery = None

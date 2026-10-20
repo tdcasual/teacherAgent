@@ -555,6 +555,8 @@ def _grade_script_error_text(exc: Exception) -> str:
 
 def _is_http_failure(exc: Exception) -> bool:
     status = getattr(exc, "status_code", None)
+    if status is None:
+        return False
     try:
         return int(status) >= 500
     except (TypeError, ValueError):

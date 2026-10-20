@@ -105,10 +105,16 @@ def _auth_secret_policy_enabled(getenv: Callable[[str, Optional[str]], Optional[
     return _truthy(getenv("AUTH_REQUIRED", None))
 
 
+_PLACEHOLDER_TOKEN_SECRETS = frozenset({"change_me", "changeme"})
+
+
 def validate_auth_secret_policy(*, getenv: Callable[[str, Optional[str]], Optional[str]] = os.getenv) -> None:
     if not _auth_secret_policy_enabled(getenv):
         return
-    if str(getenv("AUTH_TOKEN_SECRET", None) or "").strip():
+    secret = str(getenv("AUTH_TOKEN_SECRET", None) or "").strip()
+    if _is_production(getenv) and secret.lower() in _PLACEHOLDER_TOKEN_SECRETS:
+        raise RuntimeError("AUTH_TOKEN_SECRET must not be a placeholder in production")
+    if secret:
         return
     if _is_production(getenv):
         raise RuntimeError("AUTH_TOKEN_SECRET is required when AUTH_REQUIRED is enabled in production")

@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .assignment_catalog_service import effective_assignment_kind, effective_content_source
-from .question_bank_select_service import read_question_bank, stem_text_for_row
+from .question_bank_select_service import (
+    read_question_bank,
+    resolve_readable_stem_ref,
+    stem_text_for_row,
+)
 
 _SAFE_ID_RE = re.compile(r"^[\w-]+$")
 _STEM_TEXT_MAX = 400
@@ -129,21 +133,30 @@ def _clip(text: str, max_chars: int) -> str:
     return payload[:max_chars]
 
 
-def _resolve_stem_path(stem_ref: str, *, folder: Path, app_root: Path) -> Optional[Path]:
-    raw = str(stem_ref or "").strip()
-    if not raw:
-        return None
-    path = Path(raw)
-    if path.is_absolute():
-        return path
-    under_folder = folder / raw
-    if under_folder.exists():
-        return under_folder
-    return Path(app_root) / raw
+def _infer_data_dir(folder: Path) -> Path:
+    resolved = Path(folder)
+    if resolved.parent.name == "assignments":
+        return resolved.parent.parent
+    return resolved.parent
 
 
-def _read_stem_text(stem_ref: str, *, folder: Path, app_root: Path) -> str:
-    path = _resolve_stem_path(stem_ref, folder=folder, app_root=app_root)
+def _resolve_stem_path(
+    stem_ref: str, *, folder: Path, app_root: Path, data_dir: Path
+) -> Optional[Path]:
+    return resolve_readable_stem_ref(
+        stem_ref,
+        folder=folder,
+        app_root=app_root,
+        data_dir=data_dir,
+    )
+
+
+def _read_stem_text(
+    stem_ref: str, *, folder: Path, app_root: Path, data_dir: Path
+) -> str:
+    path = _resolve_stem_path(
+        stem_ref, folder=folder, app_root=app_root, data_dir=data_dir
+    )
     if path is None or not path.is_file():
         return _MISSING_STEM
     try:
@@ -156,12 +169,17 @@ def _read_stem_text(stem_ref: str, *, folder: Path, app_root: Path) -> str:
 
 
 def load_assignment_stems(
-    folder: Path, *, app_root: Path, limit: int = _STEM_LIMIT_DEFAULT
+    folder: Path,
+    *,
+    app_root: Path,
+    limit: int = _STEM_LIMIT_DEFAULT,
+    data_dir: Optional[Path] = None,
 ) -> list[dict[str, str]]:
     csv_path = Path(folder) / "questions.csv"
     if not csv_path.is_file():
         return []
     cap = max(0, int(limit))
+    resolved_data_dir = Path(data_dir) if data_dir is not None else _infer_data_dir(folder)
     items: list[dict[str, str]] = []
     for row in read_question_bank(csv_path):
         if len(items) >= cap:
@@ -178,6 +196,7 @@ def load_assignment_stems(
                     str(row.get("stem_ref") or ""),
                     folder=Path(folder),
                     app_root=Path(app_root),
+                    data_dir=resolved_data_dir,
                 ),
             }
         )
@@ -267,7 +286,8 @@ def _practice_meta_status(folder: Path) -> str:
 
 
 def _short_feedback_from_report(report: Dict[str, Any], *, limit: int) -> str:
-    items = report.get("items") if isinstance(report.get("items"), list) else []
+    raw_items = report.get("items")
+    items: list[Any] = raw_items if isinstance(raw_items, list) else []
     lines = ["【补练短反馈】"]
     for raw in items[: max(0, limit)]:
         if not isinstance(raw, dict):
@@ -319,9 +339,8 @@ def load_latest_practice_short_feedback(
 
 
 def _brief_from_detail(detail: Dict[str, Any], folder: Optional[Path]) -> str:
-    requirements = (
-        detail.get("requirements") if isinstance(detail.get("requirements"), dict) else {}
-    )
+    raw_requirements = detail.get("requirements")
+    requirements: Dict[str, Any] = raw_requirements if isinstance(raw_requirements, dict) else {}
     brief = str(requirements.get("brief") or "").strip()
     if brief:
         return brief
@@ -432,12 +451,12 @@ def build_bound_student_assignment_extra(
     app_root: Path,
     student_id: str,
 ) -> str:
-    meta = detail.get("meta") if isinstance(detail.get("meta"), dict) else {}
-    requirements = (
-        detail.get("requirements") if isinstance(detail.get("requirements"), dict) else {}
-    )
+    raw_meta = detail.get("meta")
+    meta: Dict[str, Any] = raw_meta if isinstance(raw_meta, dict) else {}
+    raw_requirements = detail.get("requirements")
+    requirements: Dict[str, Any] = raw_requirements if isinstance(raw_requirements, dict) else {}
     kind = effective_assignment_kind(meta)
-    stems = load_assignment_stems(folder, app_root=app_root)
+    stems = load_assignment_stems(folder, app_root=app_root, data_dir=data_dir)
     parts: List[str] = [build_kind_coach_rules(kind)]
     checklist = build_exam_checklist(
         kind=kind,

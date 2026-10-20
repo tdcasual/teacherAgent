@@ -56,7 +56,28 @@ def row_visible(
     return False
 
 
-_STUDENT_META_OMIT = frozenset({"expected_students", "student_ids"})
+_STUDENT_META_OMIT = frozenset({"expected_students", "student_ids", "answer_files"})
+_STUDENT_QUESTION_FIELDS = frozenset(
+    {
+        "question_id",
+        "question_no",
+        "sub_no",
+        "order",
+        "kp_id",
+        "difficulty",
+        "type",
+        "stem_text",
+        "source",
+        "tags",
+        "max_score",
+    }
+)
+
+
+def _public_student_question(item: Any) -> Any:
+    if not isinstance(item, dict):
+        return item
+    return {key: value for key, value in item.items() if key in _STUDENT_QUESTION_FIELDS}
 
 
 def public_student_assignment_detail(payload: Any) -> Any:
@@ -66,4 +87,7 @@ def public_student_assignment_detail(payload: Any) -> Any:
     meta = out.get("meta")
     if isinstance(meta, dict):
         out["meta"] = {key: value for key, value in meta.items() if key not in _STUDENT_META_OMIT}
+    questions = out.get("questions")
+    if isinstance(questions, list):
+        out["questions"] = [_public_student_question(item) for item in questions]
     return out

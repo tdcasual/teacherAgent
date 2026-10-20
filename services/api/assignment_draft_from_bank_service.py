@@ -240,6 +240,10 @@ def create_assignment_draft_from_bank(
     }
 
 
+def _diag_log(event: str, payload: Any = None) -> None:
+    _log.info("%s %s", event, payload or {})
+
+
 def build_default_from_bank_deps() -> AssignmentDraftFromBankDeps:
     from datetime import datetime
 
@@ -254,6 +258,6 @@ def build_default_from_bank_deps() -> AssignmentDraftFromBankDeps:
         resolve_scope=resolve_scope,
         normalize_due_at=normalize_due_at,
         postprocess_assignment_meta=postprocess_assignment_meta,
-        diag_log=lambda event, payload=None: _log.info("%s %s", event, payload or {}),
+        diag_log=_diag_log,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )

@@ -29,7 +29,7 @@ const historyItem = (
 describe('StudentPortraitCard', () => {
   it('reads recent_weak_kp next_focus and last practice_id and never weak_kp', async () => {
     const fetchMock = vi.fn(
-      async () =>
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
         new Response(
           JSON.stringify({
             student_id: 'S1',

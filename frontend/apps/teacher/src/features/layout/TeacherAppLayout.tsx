@@ -183,7 +183,13 @@ export default function TeacherAppLayout({
         onToggleSettingsPanel={onToggleSettingsPanel}
       />
       {settingsOpen ? (
-        <Suspense fallback={<div className="sr-only" aria-busy="true">加载设置</div>}>
+        <Suspense
+          fallback={
+            <div className="sr-only" aria-busy="true">
+              加载设置
+            </div>
+          }
+        >
           <TeacherSettingsPanel
             open={settingsOpen}
             onClose={onCloseSettings}
@@ -193,7 +199,11 @@ export default function TeacherAppLayout({
         </Suspense>
       ) : null}
       {isAdmin ? (
-        <div className="teacher-layout flex-1 min-h-0 min-w-0 overflow-hidden bg-surface">
+        <div
+          id="teacher-chat-main"
+          tabIndex={-1}
+          className="teacher-layout flex-1 min-h-0 min-w-0 overflow-hidden bg-surface"
+        >
           <Suspense fallback={workbenchFallback}>
             <AdminSchoolPanel />
           </Suspense>

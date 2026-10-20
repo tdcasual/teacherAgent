@@ -32,6 +32,7 @@ type AssignmentProgressSectionProps = {
 const extractBestScore = (value: unknown): number | null => {
   if (!value || typeof value !== 'object') return null;
   const candidate = value as { score_earned?: unknown };
+  if (candidate.score_earned == null) return null;
   const score = Number(candidate.score_earned);
   return Number.isFinite(score) ? score : null;
 };

@@ -275,16 +275,71 @@ class AssignmentCatalogServiceTest(unittest.TestCase):
                 json.dumps({"core_concepts": ["牛顿定律"]}, ensure_ascii=False),
                 encoding="utf-8",
             )
-            stem_path = root / "tmp" / "stem_q1.txt"
+            stem_path = folder / "stems" / "q1.txt"
             stem_path.parent.mkdir(parents=True, exist_ok=True)
             stem_path.write_text("题干文本", encoding="utf-8")
-            (folder / "questions.csv").write_text("question_id,stem_ref\nQ1,tmp/stem_q1.txt\n", encoding="utf-8")
+            (folder / "questions.csv").write_text(
+                "question_id,stem_ref\nQ1,data/assignments/HW_1/stems/q1.txt\n",
+                encoding="utf-8",
+            )
 
             detail = build_assignment_detail(folder=folder, include_text=True, deps=self._catalog_deps(root))
 
             self.assertEqual(detail.get("question_count"), 1)
             self.assertEqual(detail["questions"][0].get("stem_text"), "题干文本")
             self.assertEqual(detail.get("delivery")["files"][0].get("url"), "/assignment/HW_1/download?file=paper%201.pdf")
+
+    def test_build_assignment_detail_rejects_stem_outside_assignment_or_bank(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "data" / "assignments" / "HW_1"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "meta.json").write_text(
+                json.dumps({"assignment_id": "HW_1", "date": "2026-02-08"}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            secret = root / "tmp" / "secret.txt"
+            secret.parent.mkdir(parents=True, exist_ok=True)
+            secret.write_text("LEAKED_STEM", encoding="utf-8")
+            (folder / "questions.csv").write_text(
+                "question_id,stem_ref\nQ1,tmp/secret.txt\n",
+                encoding="utf-8",
+            )
+
+            detail = build_assignment_detail(folder=folder, include_text=True, deps=self._catalog_deps(root))
+            self.assertNotIn("LEAKED_STEM", json.dumps(detail, ensure_ascii=False))
+            self.assertFalse(detail["questions"][0].get("stem_text"))
+
+    def test_build_assignment_detail_reads_bank_stem_and_rejects_symlink_escape(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "data" / "assignments" / "HW_1"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "meta.json").write_text(
+                json.dumps({"assignment_id": "HW_1"}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            bank_stem = root / "data" / "question_bank" / "stems" / "b1.txt"
+            bank_stem.parent.mkdir(parents=True, exist_ok=True)
+            bank_stem.write_text("题库题干", encoding="utf-8")
+            secret = root / "tmp" / "secret.txt"
+            secret.parent.mkdir(parents=True, exist_ok=True)
+            secret.write_text("LEAKED_SYMLINK", encoding="utf-8")
+            link = folder / "stems" / "escape.txt"
+            link.parent.mkdir(parents=True, exist_ok=True)
+            link.symlink_to(secret)
+            (folder / "questions.csv").write_text(
+                "question_id,stem_ref\n"
+                "Q1,data/question_bank/stems/b1.txt\n"
+                "Q2,data/assignments/HW_1/stems/escape.txt\n",
+                encoding="utf-8",
+            )
+
+            detail = build_assignment_detail(folder=folder, include_text=True, deps=self._catalog_deps(root))
+            dump = json.dumps(detail, ensure_ascii=False)
+            self.assertEqual(detail["questions"][0].get("stem_text"), "题库题干")
+            self.assertNotIn("LEAKED_SYMLINK", dump)
+            self.assertFalse(detail["questions"][1].get("stem_text"))
 
     def test_list_assignments_supports_pagination_and_limit_cap(self):
         with TemporaryDirectory() as td:

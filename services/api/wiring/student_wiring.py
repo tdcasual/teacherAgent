@@ -51,7 +51,7 @@ def _assignment_is_sql_published(assignment_id: str, data_dir: Path) -> bool:
     return assignment_is_sql_published(data_dir, assignment_id)
 
 
-def _load_assignment_teacher_id(assignment_id: str, core) -> str | None:
+def _load_assignment_teacher_id(assignment_id: str, core: Any) -> str | None:
     try:
         folder = core.resolve_assignment_dir(assignment_id)
         meta = core.load_assignment_meta(folder)
@@ -109,7 +109,7 @@ def _queue_backend_for_core(core: Any) -> Any:
     )
 
 
-def assignment_process_archive_deps(core=None) -> AssignmentProcessArchiveDeps:
+def assignment_process_archive_deps(core: Any = None) -> AssignmentProcessArchiveDeps:
     _ac = _app_core(core)
     return AssignmentProcessArchiveDeps(
         data_dir=_ac.DATA_DIR,

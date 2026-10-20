@@ -270,12 +270,16 @@ def maybe_auto_archive(
 ) -> bool:
     try:
         resolved = _resolve_data_dir(data_dir)
-        if list_submission_attempts is None:
-            from .core_services_application import list_submission_attempts as _list_attempts
+        attempts_fn = list_submission_attempts
+        if attempts_fn is None:
+            from .core_services_application import list_submission_attempts as imported_list
 
-            list_fn = _list_attempts
-        else:
-            list_fn = list_submission_attempts
+            attempts_fn = imported_list
+
+        def list_fn(assignment_id: str, student_id: str) -> List[Dict[str, Any]]:
+            assert attempts_fn is not None
+            return attempts_fn(assignment_id, student_id)
+
         days = int(auto_archive_days) if auto_archive_days is not None else max(0, env_int("ASSIGNMENT_AUTO_ARCHIVE_DAYS", 7))
         today = date.fromisoformat(str(today_iso or _today_iso()))
         return _maybe_auto_archive_inner(

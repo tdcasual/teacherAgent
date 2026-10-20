@@ -7,7 +7,7 @@
 
 ## 产品真相
 - 产品定位：单校作业产品，不是插件市场、考试分析或通用 agent 平台
-- 老师主线：上传材料 → 审核草稿并创建 → 查看完成进度
+- 老师主线：上传材料 → 发布草稿 → 查看完成进度
 - 学生主线：今日任务 → 陪练（侧信道）→ 显式提交
 - 老师端默认能力：`teacher-assignment-ops`；全员产品面是作业三件套（作业运营 / 作业生成 / 学生教练）。任教某学科的老师额外看到该 pack 的 `skill_affiliates`（如物理老师的课堂采集）
 - 运行时契约：`docs/reference/agent-runtime-contract.md`
@@ -21,16 +21,18 @@
 ## 5 分钟快速开始
 ```bash
 cp .env.production.min.example .env
-# 填必填密钥：把 REDIS_PASSWORD / MCP_API_KEY / AUTH_TOKEN_SECRET / MASTER_KEY 的 change_me 换成真实值
+# 填必填密钥：REDIS_PASSWORD / MCP_API_KEY / AUTH_TOKEN_SECRET / MASTER_KEY。example 里这四项为空；不要填 change_me
 docker compose up -d
 ```
 
-复制 example **不会**直接启动。`change_me` 不是密钥。compose 对空的 `REDIS_PASSWORD`、`MCP_API_KEY` 与 `MASTER_KEY` 使用 `${VAR:?}`，缺值会立刻失败；`AUTH_TOKEN_SECRET` 同样必须换成部署密钥后再 `docker compose up`。四项都空着时栈起不来。MCP 仅绑定 `127.0.0.1:9000`。
+复制 example **不会**直接启动。`change_me` 不是密钥。compose 对空的 `REDIS_PASSWORD`、`MCP_API_KEY` 与 `MASTER_KEY` 使用 `${VAR:?}`，缺值会立刻失败。生产环境还会拒绝空的或值为 `change_me` 的 `AUTH_TOKEN_SECRET`。四项都空着时栈起不来。MCP 仅绑定 `127.0.0.1:9000`。
 
 启动后访问：
 - 老师端：`http://localhost:3002`
 - 学生端：`http://localhost:3001`
 - API：`http://localhost:8000`
+
+校园局域网：只改 `PUBLISH_HOST=0.0.0.0` 不够，需要同时设置 `CORS_ORIGINS` 与 `VITE_API_URL` 并重建前端镜像。步骤见 `docs/getting-started/quickstart.md`。
 
 管理员命令行入口：
 ```bash

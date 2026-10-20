@@ -11,6 +11,7 @@ from .auth_service import AuthError, enforce_upload_job_access, get_current_prin
 from .paths import APP_ROOT, require_safe_assignment_id
 from .question_bank_select_service import (
     ensure_questions_csv_header,
+    resolve_assignment_folder_ref,
     resolve_bank_ref,
     write_questions_csv,
 )
@@ -126,20 +127,7 @@ def _resolve_draft_assignment_dir(data_dir: Path, assignment_id: str) -> Path:
 def _resolve_assignment_folder_ref(
     ref: str, *, out_dir: Path, app_root: Path
 ) -> Optional[Path]:
-    raw = str(ref or "").strip()
-    if not raw:
-        return None
-    path = Path(raw)
-    if not path.is_absolute():
-        path = (Path(app_root) / path).resolve()
-    else:
-        path = path.resolve()
-    jail = Path(out_dir).resolve()
-    if path != jail and jail not in path.parents:
-        return None
-    if not path.is_file():
-        return None
-    return path
+    return resolve_assignment_folder_ref(ref, out_dir=out_dir, app_root=app_root)
 
 
 def _reject_out_of_jail_question_refs(
