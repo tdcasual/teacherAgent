@@ -54,3 +54,4 @@
 - **下一阶段（作业体裁 × 草稿来源 + 做题题库补练）**：`docs/plans/2026-10-10-next-phase-gapfill-design.md`
 - **无题库提分（考查清单 × 非做题量规 × 画像 × 发布草稿）**：`docs/plans/2026-10-12-score-up-without-bank-design.md`
 - **工程+前端结构优化 / 前端优先 6 PR**：`docs/plans/2026-10-13-engineering-frontend-optimization-design.md`
+- **审计残留修复（2026-10-14）**：`docs/plans/2026-10-14-audit-remediation-design.md`

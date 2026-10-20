@@ -9,6 +9,7 @@ CURRENT_PLAN_AUTHORITIES = {
     "docs/plans/2026-10-10-next-phase-gapfill-design.md",
     "docs/plans/2026-10-12-score-up-without-bank-design.md",
     "docs/plans/2026-10-13-engineering-frontend-optimization-design.md",
+    "docs/plans/2026-10-14-audit-remediation-design.md",
 }
 
 
