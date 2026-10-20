@@ -8,8 +8,8 @@ from tempfile import TemporaryDirectory
 
 from fastapi.testclient import TestClient
 
-from services.api.auth_service import mint_test_token
 from tests.helpers.app_factory import create_test_app
+from tests.helpers.auth_principals import register_and_mint_bearer
 
 SECRET = "test-secret-key-for-unit-tests"
 _AUTH_KEYS = ("AUTH_REQUIRED", "AUTH_TOKEN_SECRET", "APP_ENV")
@@ -44,9 +44,8 @@ def _auth_app(tmp: Path):
     )
 
 
-def _bearer(actor_id: str, role: str) -> dict[str, str]:
-    token = mint_test_token({"sub": actor_id, "role": role, "tenant_id": "school"}, secret=SECRET)
-    return {"Authorization": f"Bearer {token}"}
+def _bearer(actor_id: str, role: str, *, tmp: Path) -> dict[str, str]:
+    return register_and_mint_bearer(tmp, actor_id, role, secret=SECRET)
 
 
 def test_assignments_list_filters_to_owning_teacher() -> None:
@@ -62,7 +61,7 @@ def test_assignments_list_filters_to_owning_teacher() -> None:
         )
         app_mod = _auth_app(tmp)
         with TestClient(app_mod.app) as client:
-            res = client.get("/assignments", headers=_bearer("t_zhang", "teacher"))
+            res = client.get("/assignments", headers=_bearer("t_zhang", "teacher", tmp=tmp))
         assert res.status_code == 200
         ids = [item.get("assignment_id") for item in res.json().get("assignments") or []]
         assert ids == ["HW_A"]
@@ -85,7 +84,7 @@ def test_teacher_progress_forbids_other_teachers_assignment() -> None:
             res = client.get(
                 "/teacher/assignment/progress",
                 params={"assignment_id": "HW_B"},
-                headers=_bearer("t_zhang", "teacher"),
+                headers=_bearer("t_zhang", "teacher", tmp=tmp),
             )
         assert res.status_code == 403
         assert res.json().get("detail") == "forbidden_assignment_owner"
@@ -107,7 +106,7 @@ def test_teacher_grade_forbids_other_teachers_assignment() -> None:
         with TestClient(app_mod.app) as client:
             res = client.post(
                 "/teacher/assignment/HW_B/student/S001/grade",
-                headers=_bearer("t_zhang", "teacher"),
+                headers=_bearer("t_zhang", "teacher", tmp=tmp),
                 json={"comment": "nope"},
             )
         assert res.status_code == 403
@@ -136,7 +135,7 @@ def test_teacher_progress_allows_owner() -> None:
             res = client.get(
                 "/teacher/assignment/progress",
                 params={"assignment_id": "HW_A", "include_students": "false"},
-                headers=_bearer("t_zhang", "teacher"),
+                headers=_bearer("t_zhang", "teacher", tmp=tmp),
             )
         assert res.status_code == 200
         assert res.json().get("ok") is True
@@ -157,7 +156,7 @@ def test_student_assignment_detail_hides_without_visibility_status() -> None:
         with TestClient(app_mod.app) as client:
             res = client.get(
                 "/assignment/HW_LEGACY",
-                headers=_bearer("S001", "student"),
+                headers=_bearer("S001", "student", tmp=tmp),
             )
         assert res.status_code == 403
 
@@ -173,7 +172,7 @@ def test_student_assignment_detail_hides_orphan_without_teacher_id() -> None:
         with TestClient(app_mod.app) as client:
             res = client.get(
                 "/assignment/HW_ORPHAN",
-                headers=_bearer("S001", "student"),
+                headers=_bearer("S001", "student", tmp=tmp),
             )
         assert res.status_code == 403
 
@@ -207,7 +206,7 @@ def test_teacher_assignments_progress_filters_to_owner() -> None:
             res = client.get(
                 "/teacher/assignments/progress",
                 params={"date": "2026-02-05"},
-                headers=_bearer("t_zhang", "teacher"),
+                headers=_bearer("t_zhang", "teacher", tmp=tmp),
             )
         assert res.status_code == 200
         ids = [item.get("assignment_id") for item in res.json().get("assignments") or []]
@@ -227,7 +226,7 @@ def test_service_list_includes_orphans() -> None:
         )
         app_mod = _auth_app(tmp)
         with TestClient(app_mod.app) as client:
-            res = client.get("/assignments", headers=_bearer("svc", "service"))
+            res = client.get("/assignments", headers=_bearer("svc", "service", tmp=tmp))
         assert res.status_code == 200
         ids = [item.get("assignment_id") for item in res.json().get("assignments") or []]
         assert "HW_A" in ids

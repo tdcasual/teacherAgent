@@ -82,12 +82,12 @@ def test_compose_mcp_binds_loopback_and_requires_key() -> None:
     assert '"--port", "9000"' in dockerfile
 
 
-def test_env_examples_have_nonempty_mcp_api_key_placeholder() -> None:
+def test_env_examples_have_blank_mcp_api_key() -> None:
     for path in (".env.production.min.example", ".env.example"):
         text = Path(path).read_text(encoding="utf-8")
         match = re.search(r"^MCP_API_KEY=(.*)$", text, re.M)
         assert match is not None, f"{path} must set MCP_API_KEY"
-        assert match.group(1).strip(), f"{path} MCP_API_KEY must be a non-empty placeholder"
+        assert match.group(1).strip() == "", f"{path} MCP_API_KEY must be blank"
 
 
 def test_compose_backup_services_use_minimum_required_mounts() -> None:

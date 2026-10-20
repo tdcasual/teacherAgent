@@ -5,7 +5,6 @@ import os
 import socket
 import sqlite3
 import threading
-import time
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -15,23 +14,19 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from services.api.auth_service import mint_test_token, validate_auth_secret_policy
+from services.api.auth_service import validate_auth_secret_policy
 from tests.helpers.app_factory import create_test_app
+from tests.helpers.auth_principals import register_and_mint_bearer
 
 
-def _auth_headers(actor_id: str, role: str, *, secret: str, tenant_id: str = ""):
-    now = int(time.time())
-    claims = {
-        "sub": actor_id,
-        "role": role,
-        "exp": now + 3600,
-    }
-    if role == "admin":
-        claims["tv"] = 1
-    if tenant_id:
-        claims["tenant_id"] = tenant_id
-    token = mint_test_token(claims, secret=secret)
-    return {"Authorization": f"Bearer {token}"}
+def _auth_headers(actor_id: str, role: str, *, secret: str, tmp: Path, tenant_id: str = ""):
+    return register_and_mint_bearer(
+        tmp,
+        actor_id,
+        role,
+        secret=secret,
+        tenant_id=tenant_id or "school",
+    )
 
 
 def load_app(tmp_dir: Path, *, secret: str = "test-secret"):
@@ -101,6 +96,7 @@ def _load_app_auth_mode(tmp_dir: Path, *, auth_required: str, secret: str, app_e
     }
     if app_env in {"prod", "production"}:
         env_overrides["MASTER_KEY"] = "prod-master-key"
+        env_overrides["CORS_ORIGINS"] = "http://localhost:3001,http://localhost:3002"
     return create_test_app(
         tmp_dir,
         env_overrides=env_overrides,
@@ -125,7 +121,7 @@ def test_auth_required_off_with_token_still_enforces_scope(tmp_path: Path, monke
     app_mod = _load_app_auth_mode(
         tmp_path, auth_required="0", secret=secret, app_env="development"
     )
-    attacker = _auth_headers("teacher_a", "teacher", secret=secret)
+    attacker = _auth_headers("teacher_a", "teacher", secret=secret, tmp=tmp_path)
     with TestClient(app_mod.app) as client:
         res = client.get(
             "/teacher/history/sessions",
@@ -171,7 +167,7 @@ def test_auth_required_off_with_token_still_enforces_assignment_scope(
     app_mod = _load_app_auth_mode(
         tmp_path, auth_required="0", secret=secret, app_env="development"
     )
-    attacker = _auth_headers("student_a", "student", secret=secret)
+    attacker = _auth_headers("student_a", "student", secret=secret, tmp=tmp_path)
     with TestClient(app_mod.app) as client:
         detail = client.get("/assignment/HW_SEC_OFF", headers=attacker)
         download = client.get(
@@ -191,6 +187,7 @@ def test_admin_path_requires_x_admin_key(tmp_path: Path, monkeypatch) -> None:
     secret = "admin-key-secret"
     monkeypatch.setenv("TENANT_ADMIN_KEY", "k")
     monkeypatch.setenv("TENANT_DB_PATH", str(tmp_path / "tenants.sqlite3"))
+    monkeypatch.setenv("TENANT_DATA_BASE_DIR", str(tmp_path))
     monkeypatch.setenv("APP_ENV", "development")
     app_mod = create_test_app(
         tmp_path,
@@ -201,6 +198,7 @@ def test_admin_path_requires_x_admin_key(tmp_path: Path, monkeypatch) -> None:
             "APP_ENV": "development",
             "TENANT_ADMIN_KEY": "k",
             "TENANT_DB_PATH": str(tmp_path / "tenants.sqlite3"),
+            "TENANT_DATA_BASE_DIR": str(tmp_path),
         },
         use_runtime_entrypoint=True,
         reload_module=True,
@@ -208,7 +206,10 @@ def test_admin_path_requires_x_admin_key(tmp_path: Path, monkeypatch) -> None:
     with TestClient(app_mod.app) as client:
         missing = client.get("/admin/tenants")
         assert missing.status_code in {401, 403}
-        bearer_only = client.get("/admin/tenants", headers=_auth_headers("admin_a", "admin", secret=secret))
+        bearer_only = client.get(
+            "/admin/tenants",
+            headers=_auth_headers("admin_a", "admin", secret=secret, tmp=tmp_path),
+        )
         assert bearer_only.status_code in {401, 403}
         ok = client.get("/admin/tenants", headers={"X-Admin-Key": "k"})
         assert ok.status_code == 200
@@ -254,6 +255,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
         "AUTH_SUBJECT_ID_MAX_LEN",
         "TENANT_ADMIN_KEY",
         "TENANT_DB_PATH",
+        "TENANT_DATA_BASE_DIR",
         "APP_ENV",
         "MASTER_KEY",
     ]
@@ -273,7 +275,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             app_mod = load_app(Path(td), secret=self.SECRET)
             client = TestClient(app_mod.app)
 
-            attacker_headers = _auth_headers("teacher_attacker", "teacher", secret=self.SECRET)
+            attacker_headers = _auth_headers("teacher_attacker", "teacher", secret=self.SECRET, tmp=Path(td))
             res = client.post(
                 "/teacher/provider-registry/providers",
                 headers=attacker_headers,
@@ -294,8 +296,8 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             app_mod = load_app(Path(td), secret=self.SECRET)
             client = TestClient(app_mod.app)
 
-            teacher_a = _auth_headers("teacher_a", "teacher", secret=self.SECRET)
-            teacher_b = _auth_headers("teacher_b", "teacher", secret=self.SECRET)
+            teacher_a = _auth_headers("teacher_a", "teacher", secret=self.SECRET, tmp=Path(td))
+            teacher_b = _auth_headers("teacher_b", "teacher", secret=self.SECRET, tmp=Path(td))
 
             start = client.post(
                 "/chat/start",
@@ -319,6 +321,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             tmp = Path(td)
             os.environ["TENANT_ADMIN_KEY"] = "k"
             os.environ["TENANT_DB_PATH"] = str(tmp / "tenants.sqlite3")
+            os.environ["TENANT_DATA_BASE_DIR"] = str(tmp)
             app_mod = load_app(tmp, secret=self.SECRET)
             client = TestClient(app_mod.app)
 
@@ -329,7 +332,9 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             )
             self.assertEqual(upsert.status_code, 200)
 
-            bad_headers = _auth_headers("teacher_a", "teacher", secret=self.SECRET, tenant_id="t2")
+            bad_headers = _auth_headers(
+                "teacher_a", "teacher", secret=self.SECRET, tmp=Path(td), tenant_id="t2"
+            )
             denied = client.get("/t/t1/health", headers=bad_headers)
             self.assertEqual(denied.status_code, 403)
 
@@ -337,7 +342,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), secret=self.SECRET)
             client = TestClient(app_mod.app)
-            teacher_headers = _auth_headers("teacher_safe", "teacher", secret=self.SECRET)
+            teacher_headers = _auth_headers("teacher_safe", "teacher", secret=self.SECRET, tmp=Path(td))
 
             with socket.socket() as s:
                 s.bind(("127.0.0.1", 0))
@@ -379,7 +384,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), secret=self.SECRET)
             client = TestClient(app_mod.app)
-            student_headers = _auth_headers("student_a", "student", secret=self.SECRET)
+            student_headers = _auth_headers("student_a", "student", secret=self.SECRET, tmp=Path(td))
 
             denied = client.get(
                 "/student/history/sessions",
@@ -393,7 +398,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), secret=self.SECRET)
             with TestClient(app_mod.app) as client:
-                student_headers = _auth_headers("student_a", "student", secret=self.SECRET)
+                student_headers = _auth_headers("student_a", "student", secret=self.SECRET, tmp=Path(td))
 
                 denied = client.post(
                     "/student/profile/update",
@@ -407,7 +412,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), secret=self.SECRET)
             client = TestClient(app_mod.app)
-            student_headers = _auth_headers("student_a", "student", secret=self.SECRET)
+            student_headers = _auth_headers("student_a", "student", secret=self.SECRET, tmp=Path(td))
 
             denied = client.post(
                 "/student/submit",
@@ -441,7 +446,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
 
             app_mod = load_app(root, secret=self.SECRET)
             client = TestClient(app_mod.app)
-            attacker_headers = _auth_headers("student_a", "student", secret=self.SECRET)
+            attacker_headers = _auth_headers("student_a", "student", secret=self.SECRET, tmp=Path(td))
 
             denied = client.get(
                 "/assignment/HW_SEC_1/download",
@@ -470,7 +475,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
 
             app_mod = load_app(root, secret=self.SECRET)
             client = TestClient(app_mod.app)
-            attacker_headers = _auth_headers("student_a", "student", secret=self.SECRET)
+            attacker_headers = _auth_headers("student_a", "student", secret=self.SECRET, tmp=Path(td))
 
             denied = client.get("/assignment/HW_SEC_2", headers=attacker_headers)
             self.assertEqual(denied.status_code, 403)
@@ -488,7 +493,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
 
             app_mod = load_app(root, secret=self.SECRET)
             client = TestClient(app_mod.app)
-            student_headers = _auth_headers("student_a", "student", secret=self.SECRET)
+            student_headers = _auth_headers("student_a", "student", secret=self.SECRET, tmp=Path(td))
 
             denied = client.post(
                 "/student/import",
@@ -509,7 +514,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
 
             app_mod = load_app(root, secret=self.SECRET)
             client = TestClient(app_mod.app)
-            teacher_headers = _auth_headers("teacher_a", "teacher", secret=self.SECRET)
+            teacher_headers = _auth_headers("teacher_a", "teacher", secret=self.SECRET, tmp=Path(td))
 
             blocked = client.post(
                 "/student/import",
@@ -523,7 +528,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), secret=self.SECRET)
             client = TestClient(app_mod.app)
-            student_headers = _auth_headers("student_a", "student", secret=self.SECRET)
+            student_headers = _auth_headers("student_a", "student", secret=self.SECRET, tmp=Path(td))
 
             denied_preview = client.post(
                 "/teacher/skills/preview",
@@ -549,7 +554,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), secret=self.SECRET)
             client = TestClient(app_mod.app)
-            student_headers = _auth_headers("student_a", "student", secret=self.SECRET)
+            student_headers = _auth_headers("student_a", "student", secret=self.SECRET, tmp=Path(td))
 
             denied_assignments = client.get("/assignments", headers=student_headers)
             self.assertEqual(denied_assignments.status_code, 403)
@@ -560,7 +565,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             app_mod = load_app(Path(td), secret=self.SECRET)
             client = TestClient(app_mod.app)
 
-            teacher_headers = _auth_headers("teacher_a", "teacher", secret=self.SECRET)
+            teacher_headers = _auth_headers("teacher_a", "teacher", secret=self.SECRET, tmp=Path(td))
             denied_teacher = client.get(
                 "/assignment/today",
                 headers=teacher_headers,
@@ -569,7 +574,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             self.assertEqual(denied_teacher.status_code, 403)
             self.assertEqual(denied_teacher.json().get("detail"), "forbidden")
 
-            student_headers = _auth_headers("student_a", "student", secret=self.SECRET)
+            student_headers = _auth_headers("student_a", "student", secret=self.SECRET, tmp=Path(td))
             denied_cross_student = client.get(
                 "/assignment/today",
                 headers=student_headers,
@@ -583,8 +588,8 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             app_mod = load_app(Path(td), secret=self.SECRET)
             client = TestClient(app_mod.app)
 
-            teacher_a = _auth_headers("teacher_a", "teacher", secret=self.SECRET)
-            teacher_b = _auth_headers("teacher_b", "teacher", secret=self.SECRET)
+            teacher_a = _auth_headers("teacher_a", "teacher", secret=self.SECRET, tmp=Path(td))
+            teacher_b = _auth_headers("teacher_b", "teacher", secret=self.SECRET, tmp=Path(td))
 
             start = client.post(
                 "/assignment/upload/start",
@@ -631,7 +636,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
 
             app_mod = load_app(root, secret=self.SECRET)
             client = TestClient(app_mod.app)
-            admin_headers = _auth_headers("admin", "admin", secret=self.SECRET)
+            admin_headers = _auth_headers("admin", "admin", secret=self.SECRET, tmp=Path(td))
 
             export_res = client.post(
                 "/auth/admin/student/export-tokens",
@@ -728,7 +733,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
 
             app_mod = load_app(root, secret=self.SECRET)
             client = TestClient(app_mod.app)
-            admin_headers = _auth_headers("admin", "admin", secret=self.SECRET)
+            admin_headers = _auth_headers("admin", "admin", secret=self.SECRET, tmp=Path(td))
 
             export_res = client.post(
                 "/auth/admin/student/export-tokens",
@@ -755,7 +760,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
 
             app_mod = load_app(root, secret=self.SECRET)
             client = TestClient(app_mod.app)
-            admin_headers = _auth_headers("admin", "admin", secret=self.SECRET)
+            admin_headers = _auth_headers("admin", "admin", secret=self.SECRET, tmp=Path(td))
 
             export_res = client.post(
                 "/auth/admin/teacher/export-tokens",
@@ -810,7 +815,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
 
             app_mod = load_app(root, secret=self.SECRET)
             client = TestClient(app_mod.app)
-            admin_headers = _auth_headers("admin", "admin", secret=self.SECRET)
+            admin_headers = _auth_headers("admin", "admin", secret=self.SECRET, tmp=Path(td))
 
             warmup = client.post(
                 "/auth/admin/teacher/export-tokens",
@@ -1025,7 +1030,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             )
             app_mod = load_app(root, secret=self.SECRET)
             client = TestClient(app_mod.app)
-            admin_headers = _auth_headers("admin", "admin", secret=self.SECRET)
+            admin_headers = _auth_headers("admin", "admin", secret=self.SECRET, tmp=Path(td))
 
             warmup = client.post(
                 "/auth/admin/teacher/export-tokens",
